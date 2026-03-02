@@ -1,8 +1,7 @@
-import { Request, Response, NextFunction } from 'express';
-import { validationResult } from 'express-validator';
-import { sendError, ERROR_CODES } from '../utils/response';
+const { validationResult } = require('express-validator');
+const { sendError, ERROR_CODES } = require('../utils/response');
 
-export function validate(req: Request, res: Response, next: NextFunction): void {
+function validate(req, res, next) {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     sendError(res, 422, {
@@ -14,3 +13,5 @@ export function validate(req: Request, res: Response, next: NextFunction): void 
   }
   next();
 }
+
+module.exports = { validate };

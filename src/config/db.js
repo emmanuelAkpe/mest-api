@@ -1,8 +1,8 @@
-import mongoose from 'mongoose';
-import { env } from './env';
-import { logger } from '../utils/logger';
+const mongoose = require('mongoose');
+const { env } = require('./env');
+const { logger } = require('../utils/logger');
 
-export async function connectDB(): Promise<void> {
+async function connectDB() {
   try {
     await mongoose.connect(env.MONGODB_URI);
     logger.info('MongoDB connected', { uri: env.MONGODB_URI.replace(/\/\/.*@/, '//***@') });
@@ -19,3 +19,5 @@ export async function connectDB(): Promise<void> {
     logger.error('MongoDB error', { error: err });
   });
 }
+
+module.exports = { connectDB };

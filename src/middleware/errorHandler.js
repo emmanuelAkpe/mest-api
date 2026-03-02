@@ -1,13 +1,7 @@
-import { Request, Response, NextFunction } from 'express';
-import { logger } from '../utils/logger';
-import { sendError, ERROR_CODES } from '../utils/response';
+const { logger } = require('../utils/logger');
+const { sendError, ERROR_CODES } = require('../utils/response');
 
-export function errorHandler(
-  err: Error & { status?: number; code?: number },
-  req: Request,
-  res: Response,
-  _next: NextFunction
-): void {
+function errorHandler(err, req, res, _next) {
   logger.error('Unhandled error', {
     message: err.message,
     stack: err.stack,
@@ -29,3 +23,5 @@ export function errorHandler(
     message: 'An unexpected error occurred.',
   });
 }
+
+module.exports = { errorHandler };

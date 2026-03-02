@@ -1,7 +1,7 @@
-import rateLimit from 'express-rate-limit';
-import { sendError, ERROR_CODES } from '../utils/response';
+const rateLimit = require('express-rate-limit');
+const { sendError, ERROR_CODES } = require('../utils/response');
 
-export const globalLimiter = rateLimit({
+const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
   standardHeaders: true,
@@ -14,7 +14,7 @@ export const globalLimiter = rateLimit({
   },
 });
 
-export const authLimiter = rateLimit({
+const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   standardHeaders: true,
@@ -27,7 +27,7 @@ export const authLimiter = rateLimit({
   },
 });
 
-export const apiLimiter = rateLimit({
+const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 60,
   standardHeaders: true,
@@ -39,3 +39,5 @@ export const apiLimiter = rateLimit({
     });
   },
 });
+
+module.exports = { globalLimiter, authLimiter, apiLimiter };

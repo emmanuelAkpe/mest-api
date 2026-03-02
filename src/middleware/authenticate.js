@@ -1,12 +1,11 @@
-import { Request, Response, NextFunction } from 'express';
-import { verifyAccessToken } from '../utils/tokenUtils';
-import { sendError, ERROR_CODES } from '../utils/response';
-import Admin from '../models/Admin.model';
+const { verifyAccessToken } = require('../utils/tokenUtils');
+const { sendError, ERROR_CODES } = require('../utils/response');
+const Admin = require('../models/Admin.model');
 
-export async function authenticate(req: Request, res: Response, next: NextFunction): Promise<void> {
+async function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
 
-  if (!authHeader?.startsWith('Bearer ')) {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
     sendError(res, 401, { code: ERROR_CODES.UNAUTHORIZED, message: 'Authentication required.' });
     return;
   }
@@ -33,3 +32,15 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     sendError(res, 401, { code: ERROR_CODES.UNAUTHORIZED, message: 'Authentication required.' });
   }
 }
+
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!req.admin || !roles.includes(req.admin.role)) {
+      sendError(res, 403, { code: ERROR_CODES.FORBIDDEN, message: 'Insufficient permissions.' });
+      return;
+    }
+    next();
+  };
+}
+
+module.exports = { authenticate, requireRole };

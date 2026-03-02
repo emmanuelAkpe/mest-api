@@ -1,6 +1,4 @@
-import { Response } from 'express';
-
-export const ERROR_CODES = {
+const ERROR_CODES = {
   VALIDATION_ERROR: 'VALIDATION_ERROR',
   UNAUTHORIZED: 'UNAUTHORIZED',
   FORBIDDEN: 'FORBIDDEN',
@@ -8,23 +6,9 @@ export const ERROR_CODES = {
   RATE_LIMITED: 'RATE_LIMITED',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   DUPLICATE_ENTRY: 'DUPLICATE_ENTRY',
-} as const;
+};
 
-export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
-
-interface SuccessPayload {
-  data?: unknown;
-  message?: string;
-  meta?: unknown;
-}
-
-interface ErrorPayload {
-  code: ErrorCode;
-  message: string;
-  details?: unknown[];
-}
-
-export function sendSuccess(res: Response, status: number, payload: SuccessPayload): Response {
+function sendSuccess(res, status, payload) {
   return res.status(status).json({
     success: true,
     data: payload.data ?? {},
@@ -33,7 +17,7 @@ export function sendSuccess(res: Response, status: number, payload: SuccessPaylo
   });
 }
 
-export function sendError(res: Response, status: number, payload: ErrorPayload): Response {
+function sendError(res, status, payload) {
   return res.status(status).json({
     success: false,
     error: {
@@ -43,3 +27,5 @@ export function sendError(res: Response, status: number, payload: ErrorPayload):
     },
   });
 }
+
+module.exports = { ERROR_CODES, sendSuccess, sendError };
