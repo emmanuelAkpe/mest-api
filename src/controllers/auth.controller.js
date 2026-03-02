@@ -5,45 +5,13 @@ const { sendSuccess, sendError, ERROR_CODES } = require('../utils/response');
 const { logger } = require('../utils/logger');
 const { env } = require('../config/env');
 const { sendInviteEmail, sendPasswordResetEmail } = require('../services/email.service');
+const { getIp, getUserAgent } = require('../utils/request');
+const { logAuthEvent, setRefreshCookie, clearRefreshCookie } = require('../utils/authUtils');
 
 const INVITE_EXPIRY_MS = 72 * 60 * 60 * 1000; // 72 hours
 const RESET_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
 
 const MAX_REFRESH_TOKENS = 5;
-
-function getIp(req) {
-  return req.headers['x-forwarded-for']?.split(',')[0]?.trim() ?? req.ip ?? 'unknown';
-}
-
-function getUserAgent(req) {
-  return req.headers['user-agent'] ?? 'unknown';
-}
-
-function logAuthEvent(meta) {
-  if (meta.event === 'login_failed') {
-    logger.warn('Auth event', meta);
-  } else {
-    logger.info('Auth event', meta);
-  }
-}
-
-function setRefreshCookie(res, token) {
-  res.cookie('refreshToken', token, {
-    httpOnly: true,
-    secure: env.isProduction,
-    sameSite: 'strict',
-    path: '/api/v1/auth/refresh',
-  });
-}
-
-function clearRefreshCookie(res) {
-  res.clearCookie('refreshToken', {
-    httpOnly: true,
-    secure: env.isProduction,
-    sameSite: 'strict',
-    path: '/api/v1/auth/refresh',
-  });
-}
 
 async function issueTokens(admin, res) {
   const accessToken = signAccessToken({ id: admin.id, email: admin.email, role: admin.role });

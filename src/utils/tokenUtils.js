@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { env } = require('../config/env');
@@ -30,4 +31,12 @@ async function compareToken(token, hash) {
   return bcrypt.compare(token, hash);
 }
 
-module.exports = { signAccessToken, signRefreshToken, verifyAccessToken, verifyRefreshToken, hashToken, compareToken };
+function generateRawToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+function hashEvaluationToken(rawToken) {
+  return crypto.createHash('sha256').update(rawToken).digest('hex');
+}
+
+module.exports = { signAccessToken, signRefreshToken, verifyAccessToken, verifyRefreshToken, hashToken, compareToken, generateRawToken, hashEvaluationToken };
