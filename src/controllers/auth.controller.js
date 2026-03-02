@@ -333,6 +333,62 @@ async function resetPassword(req, res, next) {
   }
 }
 
+async function changePassword(req, res, next) {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    const admin = await Admin.findById(req.admin.id).select('+password');
+
+    const passwordMatch = await admin.comparePassword(currentPassword);
+    if (!passwordMatch) {
+      sendError(res, 400, { code: ERROR_CODES.UNAUTHORIZED, message: 'Current password is incorrect.' });
+      return;
+    }
+
+    admin.password = newPassword;
+    admin.refreshTokens = []; // invalidate all sessions
+    await admin.save();
+
+    clearRefreshCookie(res);
+    logAuthEvent({ event: 'password_changed', adminId: admin.id, email: admin.email, ip: getIp(req), userAgent: getUserAgent(req) });
+
+    sendSuccess(res, 200, { message: 'Password changed successfully. Please log in again.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function resendInvite(req, res, next) {
+  try {
+    const { email } = req.body;
+
+    const admin = await Admin
+      .findOne({ email: email.toLowerCase(), isActive: false })
+      .select('+inviteToken +inviteTokenExpiry');
+
+    if (!admin) {
+      sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'No pending invitation found for this email.' });
+      return;
+    }
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const hashedToken = await hashToken(rawToken);
+
+    admin.inviteToken = hashedToken;
+    admin.inviteTokenExpiry = new Date(Date.now() + INVITE_EXPIRY_MS);
+    await admin.save();
+
+    const inviteUrl = `${env.FRONTEND_URL}/onboard?token=${rawToken}&email=${encodeURIComponent(admin.email)}`;
+    await sendInviteEmail({ to: admin.email, firstName: admin.firstName, inviteUrl });
+
+    logAuthEvent({ event: 'invite_resent', adminId: admin.id, email: admin.email, resentBy: req.admin.id, ip: getIp(req), userAgent: getUserAgent(req) });
+
+    sendSuccess(res, 200, { message: 'Invitation resent successfully.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
 function getMe(req, res) {
   const { id, firstName, lastName, email, role, lastLogin, createdAt } = req.admin;
   sendSuccess(res, 200, {
@@ -340,4 +396,4 @@ function getMe(req, res) {
   });
 }
 
-module.exports = { invite, onboard, login, refresh, logout, getMe, forgotPassword, resetPassword };
+module.exports = { invite, onboard, login, refresh, logout, getMe, forgotPassword, resetPassword, changePassword, resendInvite };
