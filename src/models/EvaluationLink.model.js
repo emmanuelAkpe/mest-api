@@ -9,6 +9,7 @@ const evaluationLinkSchema = new mongoose.Schema(
     evaluatorEmail: { type: String, trim: true },
     teams: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Team' }],
     tokenHash: { type: String, required: true, select: false },
+    evalUrl: { type: String },
     status: { type: String, enum: LINK_STATUSES, default: 'not_opened' },
     expiresAt: { type: Date, required: true },
     isRevoked: { type: Boolean, default: false },

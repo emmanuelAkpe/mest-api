@@ -2,6 +2,7 @@ const Team = require('../models/Team.model');
 const Event = require('../models/Event.model');
 const Cohort = require('../models/Cohort.model');
 const Trainee = require('../models/Trainee.model');
+const MemberChange = require('../models/MemberChange.model');
 const { sendSuccess, sendError, ERROR_CODES } = require('../utils/response');
 const { logger } = require('../utils/logger');
 const { getIp, getUserAgent } = require('../utils/request');
@@ -157,23 +158,27 @@ async function list(req, res, next) {
   try {
     const { eventId } = req.params;
 
-    const event = await Event.findById(eventId).select('name type startDate endDate');
+    const event = await Event.findById(eventId).select('name type startDate endDate parentEvent');
     if (!event) {
       sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Event not found.' });
       return;
     }
+
+    // Sessions inherit teams from their parent program — include both IDs in the filter
+    const eventIds = [eventId];
+    if (event.parentEvent) eventIds.push(event.parentEvent.toString());
 
     const page = req.query.page ?? 1;
     const limit = req.query.limit ?? 20;
     const skip = (page - 1) * limit;
 
     const [teams, total] = await Promise.all([
-      Team.find({ event: eventId })
+      Team.find({ event: { $in: eventIds } })
         .populate('members.trainee', 'firstName lastName photo')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
-      Team.countDocuments({ event: eventId }),
+      Team.countDocuments({ event: { $in: eventIds } }),
     ]);
 
     sendSuccess(res, 200, {
@@ -363,4 +368,50 @@ async function logPivot(req, res, next) {
   }
 }
 
-module.exports = { create, list, getById, update, dissolve, logPivot };
+async function logMemberChange(req, res, next) {
+  try {
+    const team = await Team.findById(req.params.id).select('_id');
+    if (!team) {
+      sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Team not found.' });
+      return;
+    }
+
+    const { trainee, changeType, previousRoles, newRoles, reason, destinationTeam } = req.body;
+
+    const entry = await MemberChange.create({
+      team: team._id,
+      trainee,
+      changeType,
+      previousRoles: previousRoles ?? [],
+      newRoles: newRoles ?? [],
+      reason: reason ?? undefined,
+      destinationTeam: destinationTeam ?? undefined,
+      loggedBy: req.admin.id,
+    });
+
+    sendSuccess(res, 201, { data: entry, message: 'Member change logged.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function listMemberChanges(req, res, next) {
+  try {
+    const team = await Team.findById(req.params.id).select('_id');
+    if (!team) {
+      sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Team not found.' });
+      return;
+    }
+
+    const changes = await MemberChange.find({ team: team._id })
+      .populate('trainee', 'firstName lastName photo')
+      .populate('destinationTeam', 'name')
+      .sort({ createdAt: -1 });
+
+    sendSuccess(res, 200, { data: changes });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { create, list, getById, update, dissolve, logPivot, logMemberChange, listMemberChanges };

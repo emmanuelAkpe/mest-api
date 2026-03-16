@@ -18,6 +18,7 @@ const { eventRouter: teamsEventRouter, individualRouter: teamsRouter } = require
 const { eventRouter: kpisEventRouter, individualRouter: kpisRouter } = require("./routes/kpi.routes");
 const { eventRouter: evalLinksEventRouter, individualRouter: evalLinksRouter } = require("./routes/evaluationLink.routes");
 const evaluateRouter = require("./routes/evaluate.routes");
+const chatRouter = require("./routes/chat.routes");
 
 const app = express();
 
@@ -59,6 +60,7 @@ app.use("/api/v1/kpis", kpisRouter);
 app.use("/api/v1/events/:eventId/evaluation-links", evalLinksEventRouter);
 app.use("/api/v1/evaluation-links", evalLinksRouter);
 app.use("/api/v1/evaluate", evaluateRouter);
+app.use("/api/v1/chat", chatRouter);
 
 // 404
 app.use((_req, res) => {

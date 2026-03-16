@@ -1,5 +1,6 @@
 const Trainee = require('../models/Trainee.model');
 const Cohort = require('../models/Cohort.model');
+const MemberChange = require('../models/MemberChange.model');
 const { sendSuccess, sendError, ERROR_CODES } = require('../utils/response');
 const { logger } = require('../utils/logger');
 const { getIp, getUserAgent } = require('../utils/request');
@@ -212,4 +213,23 @@ async function update(req, res, next) {
   }
 }
 
-module.exports = { create, list, getById, update };
+async function listMemberChanges(req, res, next) {
+  try {
+    const trainee = await Trainee.findById(req.params.id).select('_id');
+    if (!trainee) {
+      sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Trainee not found.' });
+      return;
+    }
+
+    const changes = await MemberChange.find({ trainee: trainee._id })
+      .populate('team', 'name event')
+      .populate('destinationTeam', 'name')
+      .sort({ createdAt: -1 });
+
+    sendSuccess(res, 200, { data: changes });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { create, list, getById, update, listMemberChanges };

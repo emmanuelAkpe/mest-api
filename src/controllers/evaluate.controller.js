@@ -13,7 +13,13 @@ function logEvaluateEvent(meta) {
 
 async function findValidLink(token, res) {
   const tokenHash = hashEvaluationToken(token);
-  const link = await EvaluationLink.findOne({ tokenHash }).select('+tokenHash').populate('teams', 'name members');
+  const link = await EvaluationLink.findOne({ tokenHash })
+    .select('+tokenHash')
+    .populate({
+      path: 'teams',
+      select: 'name members productIdea marketFocus',
+      populate: { path: 'members.trainee', select: 'firstName lastName photo' },
+    });
 
   if (!link) {
     sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Evaluation link not found.' });
@@ -45,10 +51,7 @@ async function getForm(req, res, next) {
     const event = await Event.findById(link.event).select('name type startDate endDate');
     const kpis = await KPI.find({ event: link.event }).sort({ order: 1, createdAt: 1 });
 
-    let existingSubmission = null;
-    if (link.status === 'submitted') {
-      existingSubmission = await EvaluationSubmission.findOne({ link: link._id });
-    }
+    const existingSubmission = await EvaluationSubmission.findOne({ link: link._id });
 
     sendSuccess(res, 200, {
       data: {
@@ -104,16 +107,12 @@ async function submit(req, res, next) {
     const { teamScores } = req.body;
     const kpis = await KPI.find({ event: link.event }).sort({ order: 1, createdAt: 1 });
 
-    // Validate: all link teams must be present
+    // Validate: submitted teams must belong to this link (partial submission is allowed)
     const linkTeamIds = link.teams.map((t) => t._id.toString());
     const submittedTeamIds = teamScores.map((ts) => ts.team.toString());
 
-    const missingTeams = linkTeamIds.filter((id) => !submittedTeamIds.includes(id));
-    if (missingTeams.length > 0) {
-      sendError(res, 400, {
-        code: ERROR_CODES.VALIDATION_ERROR,
-        message: `Missing scores for team(s): ${missingTeams.join(', ')}.`,
-      });
+    if (submittedTeamIds.length === 0) {
+      sendError(res, 400, { code: ERROR_CODES.VALIDATION_ERROR, message: 'No team scores provided.' });
       return;
     }
 
@@ -176,6 +175,19 @@ async function submit(req, res, next) {
 
     const now = new Date();
 
+    // Merge new scores with any previously submitted teams
+    const existing = await EvaluationSubmission.findOne({ link: link._id });
+    const mergedMap = {};
+    if (existing) {
+      for (const ts of existing.teamScores) {
+        mergedMap[ts.team.toString()] = ts;
+      }
+    }
+    for (const ts of teamScores) {
+      mergedMap[ts.team.toString()] = ts;
+    }
+    const mergedTeamScores = Object.values(mergedMap);
+
     const submission = await EvaluationSubmission.findOneAndUpdate(
       { link: link._id },
       {
@@ -184,7 +196,7 @@ async function submit(req, res, next) {
           event: link.event,
           evaluatorName: link.evaluatorName,
           evaluatorEmail: link.evaluatorEmail,
-          teamScores,
+          teamScores: mergedTeamScores,
           submittedAt: now,
         },
       },
@@ -212,7 +224,8 @@ async function submit(req, res, next) {
         submissionId: submission.id,
         submittedAt: submission.submittedAt,
         evaluatorName: submission.evaluatorName,
-        teamCount: teamScores.length,
+        submittedTeamIds: mergedTeamScores.map((ts) => ts.team.toString()),
+        teamCount: mergedTeamScores.length,
       },
       message: 'Evaluation submitted successfully.',
     });

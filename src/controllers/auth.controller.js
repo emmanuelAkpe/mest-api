@@ -126,7 +126,7 @@ async function login(req, res, next) {
 
     const admin = await Admin.findByEmail(email);
 
-    if (!admin || !admin.isActive) {
+    if (!admin || !admin.isActive || !admin.password) {
       logAuthEvent({ event: 'login_failed', adminId: null, email, ip: getIp(req), userAgent: getUserAgent(req), reason: 'not_found_or_inactive' });
       sendError(res, 401, { code: ERROR_CODES.UNAUTHORIZED, message: INVALID_MSG });
       return;

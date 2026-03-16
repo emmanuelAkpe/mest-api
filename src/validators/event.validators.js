@@ -15,6 +15,7 @@ const createEventValidation = [
     .withMessage('Description must not exceed 2000 characters.'),
   body('startDate').isISO8601().withMessage('Start date must be a valid date.').toDate(),
   body('endDate').isISO8601().withMessage('End date must be a valid date.').toDate(),
+  body('parentEvent').optional().isMongoId().withMessage('parentEvent must be a valid ID.'),
 ];
 
 const updateEventValidation = [

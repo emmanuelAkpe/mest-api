@@ -72,4 +72,15 @@ const listTeamsValidation = [
     .toInt(),
 ];
 
-module.exports = { createTeamValidation, updateTeamValidation, logPivotValidation, listTeamsValidation };
+const logMemberChangeValidation = [
+  body('trainee').isMongoId().withMessage('trainee must be a valid ID.'),
+  body('changeType')
+    .isIn(['joined', 'left', 'role_changed'])
+    .withMessage('changeType must be joined, left, or role_changed.'),
+  body('previousRoles').optional().isArray().withMessage('previousRoles must be an array.'),
+  body('newRoles').optional().isArray().withMessage('newRoles must be an array.'),
+  body('reason').optional().trim().isLength({ max: 500 }).withMessage('reason must not exceed 500 characters.'),
+  body('destinationTeam').optional().isMongoId().withMessage('destinationTeam must be a valid ID.'),
+];
+
+module.exports = { createTeamValidation, updateTeamValidation, logPivotValidation, listTeamsValidation, logMemberChangeValidation };

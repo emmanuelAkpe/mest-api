@@ -2,7 +2,7 @@ const { Router } = require('express');
 const { apiLimiter } = require('../middleware/rateLimiter');
 const { validate } = require('../middleware/validate');
 const { authenticate } = require('../middleware/authenticate');
-const { create, list, getById, update } = require('../controllers/trainee.controller');
+const { create, list, getById, update, listMemberChanges } = require('../controllers/trainee.controller');
 const {
   createTraineeValidation,
   updateTraineeValidation,
@@ -20,5 +20,6 @@ const individualRouter = Router();
 individualRouter.use(apiLimiter);
 individualRouter.get('/:id', authenticate, getById);
 individualRouter.put('/:id', authenticate, updateTraineeValidation, validate, update);
+individualRouter.get('/:id/member-changes', authenticate, listMemberChanges);
 
 module.exports = { cohortRouter, individualRouter };

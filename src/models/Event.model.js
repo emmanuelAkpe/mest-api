@@ -5,6 +5,7 @@ const EVENT_TYPES = ['startup_build', 'newco', 'class_workshop', 'internal_revie
 const eventSchema = new mongoose.Schema(
   {
     cohort: { type: mongoose.Schema.Types.ObjectId, ref: 'Cohort', required: true },
+    parentEvent: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', default: null },
     name: { type: String, required: true, trim: true },
     type: { type: String, enum: EVENT_TYPES, required: true },
     description: { type: String, trim: true },

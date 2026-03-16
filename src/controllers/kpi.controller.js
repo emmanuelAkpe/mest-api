@@ -22,6 +22,7 @@ function formatKPI(kpi) {
     requireComment: kpi.requireComment,
     showRecommendation: kpi.showRecommendation,
     order: kpi.order,
+    rubric: kpi.rubric ?? [],
     createdBy: kpi.createdBy,
     createdAt: kpi.createdAt,
     updatedAt: kpi.updatedAt,
@@ -89,7 +90,7 @@ async function create(req, res, next) {
     const {
       name, description, weight, scaleType,
       scaleMin, scaleMax, appliesTo,
-      requireComment, showRecommendation, order,
+      requireComment, showRecommendation, order, rubric,
     } = req.body;
 
     const scaleError = validateCustomScale(scaleType, scaleMin, scaleMax);
@@ -112,6 +113,7 @@ async function create(req, res, next) {
       requireComment,
       showRecommendation,
       order: order !== undefined ? order : count + 1,
+      rubric: Array.isArray(rubric) ? rubric : [],
       createdBy: req.admin.id,
     });
 
@@ -149,7 +151,7 @@ async function update(req, res, next) {
     const {
       name, description, weight, scaleType,
       scaleMin, scaleMax, appliesTo,
-      requireComment, showRecommendation, order,
+      requireComment, showRecommendation, order, rubric,
     } = req.body;
 
     const resolvedScaleType = scaleType !== undefined ? scaleType : kpi.scaleType;
@@ -178,6 +180,7 @@ async function update(req, res, next) {
     if (requireComment !== undefined) updates.requireComment = requireComment;
     if (showRecommendation !== undefined) updates.showRecommendation = showRecommendation;
     if (order !== undefined) updates.order = order;
+    if (rubric !== undefined) updates.rubric = Array.isArray(rubric) ? rubric : [];
 
     await KPI.findByIdAndUpdate(req.params.id, { $set: updates }, { new: true, runValidators: true });
 

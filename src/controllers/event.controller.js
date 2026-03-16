@@ -25,10 +25,18 @@ function buildStatusFilter(status) {
   }
 }
 
+function formatParentEvent(parent) {
+  if (!parent) return null;
+  const id = (parent.id && typeof parent.id === 'string') ? parent.id
+    : (parent._id ? parent._id.toString() : null);
+  return { id, name: parent.name, type: parent.type };
+}
+
 function formatEvent(event) {
   return {
     id: event.id,
     cohort: event.cohort,
+    parentEvent: formatParentEvent(event.parentEvent),
     name: event.name,
     type: event.type,
     description: event.description,
@@ -59,7 +67,7 @@ async function create(req, res, next) {
       return;
     }
 
-    const { name, type, description, startDate, endDate } = req.body;
+    const { name, type, description, startDate, endDate, parentEvent } = req.body;
 
     if (new Date(endDate) <= new Date(startDate)) {
       sendError(res, 400, {
@@ -69,8 +77,17 @@ async function create(req, res, next) {
       return;
     }
 
+    if (parentEvent) {
+      const parent = await Event.findById(parentEvent).select('_id');
+      if (!parent) {
+        sendError(res, 400, { code: ERROR_CODES.VALIDATION_ERROR, message: 'Parent event not found.' });
+        return;
+      }
+    }
+
     const event = await Event.create({
       cohort: cohortId,
+      parentEvent: parentEvent ?? null,
       name,
       type,
       description,
@@ -111,7 +128,7 @@ async function list(req, res, next) {
     if (req.query.status) Object.assign(filter, buildStatusFilter(req.query.status));
 
     const [events, total] = await Promise.all([
-      Event.find(filter).sort({ startDate: 1 }).skip(skip).limit(limit),
+      Event.find(filter).populate('parentEvent', 'id name type').sort({ startDate: 1 }).skip(skip).limit(limit),
       Event.countDocuments(filter),
     ]);
 
@@ -132,6 +149,7 @@ async function getById(req, res, next) {
   try {
     const event = await Event.findById(req.params.id)
       .populate('cohort', 'name year isArchived')
+      .populate('parentEvent', 'id name type')
       .populate('createdBy', 'firstName lastName email');
 
     if (!event) {

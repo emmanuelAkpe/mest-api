@@ -3,6 +3,15 @@ const mongoose = require('mongoose');
 const SCALE_TYPES = ['1_to_5', '1_to_10', 'percentage', 'custom'];
 const APPLIES_TO = ['team', 'individual', 'both'];
 
+const rubricItemSchema = new mongoose.Schema(
+  {
+    score: { type: Number, required: true },
+    label: { type: String, required: true, trim: true },
+    description: { type: String, trim: true },
+  },
+  { _id: false }
+);
+
 const kpiSchema = new mongoose.Schema(
   {
     event: { type: mongoose.Schema.Types.ObjectId, ref: 'Event', required: true },
@@ -16,6 +25,7 @@ const kpiSchema = new mongoose.Schema(
     requireComment: { type: Boolean, default: false },
     showRecommendation: { type: Boolean, default: false },
     order: { type: Number, default: 0 },
+    rubric: { type: [rubricItemSchema], default: [] },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
   },
   { timestamps: true }
