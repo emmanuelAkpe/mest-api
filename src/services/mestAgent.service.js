@@ -214,4 +214,87 @@ async function runAgentStream({ messages, userMessage, context, onEvent }) {
   return fallback;
 }
 
-module.exports = { runAgentStream };
+function buildTraineeInsightSystemPrompt() {
+  const today = new Date().toISOString().split('T')[0];
+  return `You are MEST Intelligence — the analytical brain of the MEST (Meltwater Entrepreneurial School of Technology) platform, Africa's leading tech startup accelerator.
+
+Today: ${today}
+
+Your task: generate a deep, structured insight profile for a single trainee. You will be given their trainee ID. You MUST:
+1. Call getTraineeProfile(traineeId) — get their background, teams, and roles
+2. Call getTeamProgressOverTime for each team they've been part of (up to 3 most recent) — understand performance trajectories
+3. Call identifyAtRiskSignals for their cohort — check if they appear in any risk patterns
+
+Then synthesize everything into the exact JSON schema below.
+
+HARD RULES:
+✗ Never fabricate numbers — only cite data from tool results
+✗ No generic advice ("provide support", "monitor progress") — be specific to this person
+✓ Reference actual team names, event names, KPI names, scores
+✓ Quantify everything: "scored 68/100 on Execution across 2 events" not "performed well"
+✓ If data is limited (no evaluations yet), state that explicitly in the relevant fields
+
+SCORING SCALE: 0–40 = early stage | 41–60 = developing | 61–75 = solid | 76–90 = strong | 91–100 = exceptional
+
+Respond ONLY with a valid JSON object matching this schema — no markdown, no preamble, no trailing text:
+{
+  "headline": "one sharp sentence capturing this trainee's defining characteristic or trajectory",
+  "profileStrength": "strong | moderate | developing",
+  "summary": "3–4 sentences: their background, standout qualities, and how they've performed in teams so far. Cite actual data.",
+  "strengths": ["specific, evidence-based strength — name the team or event", "..."],
+  "growthAreas": ["specific gap or pattern observed — cite data or absence of data", "..."],
+  "teamJourneyInsight": "1–2 sentences on patterns across their team history — roles held, performance, mobility",
+  "recommendation": "the single most important action MEST should take for this trainee right now — specific, named, actionable",
+  "tags": ["short descriptor like 'Technical Powerhouse', 'Consistent Performer', 'Leadership Signal'", "..."]
+}`;
+}
+
+async function generateTraineeInsightReport({ traineeId }) {
+  const chatMessages = [
+    { role: 'system', content: buildTraineeInsightSystemPrompt() },
+    { role: 'user', content: `Generate a full insight report for trainee ID: ${traineeId}` },
+  ];
+
+  let iterations = 0;
+  const MAX_ITERATIONS = 6;
+
+  while (iterations < MAX_ITERATIONS) {
+    iterations++;
+
+    const data = await hfChat(chatMessages, HF_TOOL_DECLARATIONS);
+    const choice = data.choices?.[0];
+    if (!choice) break;
+
+    const msg = choice.message;
+    chatMessages.push(msg);
+
+    if (choice.finish_reason === 'tool_calls' || msg.tool_calls?.length > 0) {
+      const toolCalls = msg.tool_calls ?? [];
+
+      for (const tc of toolCalls) {
+        const name = tc.function.name;
+        let args = {};
+        try { args = JSON.parse(tc.function.arguments || '{}'); } catch { args = {}; }
+
+        logger.info('Trainee insight agent tool call', { name, traineeId });
+        let result;
+        try { result = await executeTool(name, args); }
+        catch (err) {
+          logger.warn('Trainee insight tool error', { name, err: err.message });
+          result = { error: err.message };
+        }
+
+        chatMessages.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) });
+      }
+      continue;
+    }
+
+    const text = (msg.content ?? '').trim();
+    const clean = text.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
+    return JSON.parse(clean);
+  }
+
+  throw new Error('Agent failed to produce a trainee insight report within the iteration limit.');
+}
+
+module.exports = { runAgentStream, generateTraineeInsightReport };

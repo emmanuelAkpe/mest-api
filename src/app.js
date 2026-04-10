@@ -19,6 +19,15 @@ const { eventRouter: kpisEventRouter, individualRouter: kpisRouter } = require("
 const { eventRouter: evalLinksEventRouter, individualRouter: evalLinksRouter } = require("./routes/evaluationLink.routes");
 const evaluateRouter = require("./routes/evaluate.routes");
 const chatRouter = require("./routes/chat.routes");
+const uploadRouter = require("./routes/upload.routes");
+const completeProfileRouter = require("./routes/completeProfile.routes");
+const completeTeamRouter = require("./routes/completeTeam.routes");
+const { adminRouter: submissionLinksAdminRouter, teamRouter: submissionLinksTeamRouter, publicRouter: submissionLinksPublicRouter } = require("./routes/submissionLink.routes");
+const { eventRouter: deliverablesEventRouter, individualRouter: deliverablesRouter } = require("./routes/deliverable.routes");
+const exportRouter = require("./routes/export.routes");
+const notificationRouter = require("./routes/notification.routes");
+const traineePortalRouter = require("./routes/traineePortal.routes");
+const programmeBriefingRouter = require("./routes/programmeBriefing.routes");
 
 const app = express();
 
@@ -61,6 +70,18 @@ app.use("/api/v1/events/:eventId/evaluation-links", evalLinksEventRouter);
 app.use("/api/v1/evaluation-links", evalLinksRouter);
 app.use("/api/v1/evaluate", evaluateRouter);
 app.use("/api/v1/chat", chatRouter);
+app.use("/api/v1/upload", uploadRouter);
+app.use("/api/v1/complete-profile", completeProfileRouter);
+app.use("/api/v1/complete-team", completeTeamRouter);
+app.use("/api/v1/submission-links", submissionLinksAdminRouter);
+app.use("/api/v1/teams/:id/submission-links", submissionLinksTeamRouter);
+app.use("/api/v1/submission-links/public/:token", submissionLinksPublicRouter);
+app.use("/api/v1/events/:eventId/deliverables", deliverablesEventRouter);
+app.use("/api/v1/deliverables", deliverablesRouter);
+app.use("/api/v1", exportRouter);
+app.use("/api/v1/notifications", notificationRouter);
+app.use("/api/v1/trainee-portal", traineePortalRouter);
+app.use("/api/v1/cohorts/:cohortId/briefings", programmeBriefingRouter);
 
 // 404
 app.use((_req, res) => {

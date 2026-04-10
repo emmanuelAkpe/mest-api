@@ -6,6 +6,7 @@ const { sendSuccess, sendError, ERROR_CODES } = require('../utils/response');
 const { logger } = require('../utils/logger');
 const { getIp, getUserAgent } = require('../utils/request');
 const { hashEvaluationToken } = require('../utils/tokenUtils');
+const { createNotification } = require('../services/notification.service');
 
 function logEvaluateEvent(meta) {
   logger.info('Evaluate event', meta);
@@ -217,6 +218,19 @@ async function submit(req, res, next) {
       teamCount: teamScores.length,
       ip: getIp(req),
       userAgent: getUserAgent(req),
+    });
+
+    setImmediate(async () => {
+      try {
+        const event = await Event.findById(link.event).select('name cohort');
+        await createNotification({
+          type: 'evaluation_submitted',
+          title: 'Evaluation submitted',
+          body: `${link.evaluatorName} submitted scores for ${teamScores.length} team${teamScores.length !== 1 ? 's' : ''} in "${event?.name ?? 'an event'}"`,
+          link: `/events/${link.event}`,
+          cohort: event?.cohort ?? null,
+        });
+      } catch {}
     });
 
     sendSuccess(res, 200, {

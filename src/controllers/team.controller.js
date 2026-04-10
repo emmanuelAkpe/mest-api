@@ -3,9 +3,13 @@ const Event = require('../models/Event.model');
 const Cohort = require('../models/Cohort.model');
 const Trainee = require('../models/Trainee.model');
 const MemberChange = require('../models/MemberChange.model');
+const TeamCompletionToken = require('../models/TeamCompletionToken.model');
 const { sendSuccess, sendError, ERROR_CODES } = require('../utils/response');
 const { logger } = require('../utils/logger');
 const { getIp, getUserAgent } = require('../utils/request');
+const { generateRawToken, hashEvaluationToken } = require('../utils/tokenUtils');
+const { sendTeamCompletionEmail } = require('../services/email.service');
+const { env } = require('../config/env');
 
 function logTeamEvent(meta) {
   logger.info('Team event', meta);
@@ -134,6 +138,18 @@ async function create(req, res, next) {
       createdBy: req.admin.id,
     });
 
+    if ((members ?? []).length > 0) {
+      await MemberChange.insertMany(
+        members.map((m) => ({
+          team: team._id,
+          trainee: m.trainee,
+          changeType: 'joined',
+          newRoles: m.roles ?? [],
+          loggedBy: req.admin.id,
+        }))
+      );
+    }
+
     logTeamEvent({
       event: 'team_created',
       teamId: team.id,
@@ -255,6 +271,11 @@ async function update(req, res, next) {
     if (members !== undefined) updates.members = members;
     if (parentTeam !== undefined) updates.parentTeam = parentTeam;
 
+    // Detect newly added members before overwriting
+    const previousMemberIds = new Set(team.members.map((m) => m.trainee.toString()));
+    const incomingMembers = members ?? [];
+    const newlyAdded = incomingMembers.filter((m) => !previousMemberIds.has(m.trainee.toString()));
+
     const event = await Event.findById(team.event).select('name type startDate endDate');
 
     const updated = await Team.findByIdAndUpdate(
@@ -264,6 +285,18 @@ async function update(req, res, next) {
     )
       .populate('members.trainee', 'firstName lastName photo')
       .populate('pivots.loggedBy', 'firstName lastName');
+
+    if (newlyAdded.length > 0) {
+      await MemberChange.insertMany(
+        newlyAdded.map((m) => ({
+          team: team._id,
+          trainee: m.trainee,
+          changeType: 'joined',
+          newRoles: m.roles ?? [],
+          loggedBy: req.admin.id,
+        }))
+      );
+    }
 
     logTeamEvent({
       event: 'team_updated',
@@ -414,4 +447,77 @@ async function listMemberChanges(req, res, next) {
   }
 }
 
-module.exports = { create, list, getById, update, dissolve, logPivot, logMemberChange, listMemberChanges };
+async function sendTeamProfileLink(req, res, next) {
+  try {
+    const team = await Team.findById(req.params.id)
+      .populate('members.trainee', 'firstName lastName email');
+    if (!team) {
+      sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Team not found.' });
+      return;
+    }
+
+    const leadMember = team.members.find((m) => m.roles.includes('team_lead'));
+    if (!leadMember || !leadMember.trainee) {
+      sendError(res, 400, {
+        code: ERROR_CODES.VALIDATION_ERROR,
+        message: 'Assign a team lead before sending the team profile link.',
+      });
+      return;
+    }
+
+    const lead = leadMember.trainee;
+    if (!lead.email) {
+      sendError(res, 400, { code: ERROR_CODES.VALIDATION_ERROR, message: 'Team lead has no email address.' });
+      return;
+    }
+
+    await TeamCompletionToken.updateMany(
+      { team: team._id, isRevoked: false },
+      { $set: { isRevoked: true } }
+    );
+
+    const rawToken = generateRawToken();
+    const tokenHash = hashEvaluationToken(rawToken);
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await TeamCompletionToken.create({
+      team: team._id,
+      tokenHash,
+      expiresAt,
+      createdBy: req.admin.id,
+    });
+
+    const completionUrl = `${env.FRONTEND_URL}/complete-team/${rawToken}`;
+
+    await sendTeamCompletionEmail({
+      to: lead.email,
+      teamLeadName: lead.firstName,
+      teamName: team.name,
+      completionUrl,
+      expiresAt,
+    });
+
+    sendSuccess(res, 200, { data: { sent: true, expiresAt }, message: 'Team profile link sent.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function revokeTeamProfileLink(req, res, next) {
+  try {
+    const team = await Team.findById(req.params.id).select('_id');
+    if (!team) {
+      sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Team not found.' });
+      return;
+    }
+    await TeamCompletionToken.updateMany(
+      { team: team._id, isRevoked: false },
+      { $set: { isRevoked: true } }
+    );
+    sendSuccess(res, 200, { message: 'Team profile link revoked.' });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { create, list, getById, update, dissolve, logPivot, logMemberChange, listMemberChanges, sendTeamProfileLink, revokeTeamProfileLink };
