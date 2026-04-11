@@ -12,18 +12,40 @@ const { errorHandler } = require("./middleware/errorHandler");
 const { sendError, ERROR_CODES } = require("./utils/response");
 const authRoutes = require("./routes/auth.routes");
 const cohortRoutes = require("./routes/cohort.routes");
-const { cohortRouter: traineesCohortRouter, individualRouter: traineesRouter } = require("./routes/trainee.routes");
-const { cohortRouter: eventsCohortRouter, individualRouter: eventsRouter } = require("./routes/event.routes");
-const { eventRouter: teamsEventRouter, individualRouter: teamsRouter } = require("./routes/team.routes");
-const { eventRouter: kpisEventRouter, individualRouter: kpisRouter } = require("./routes/kpi.routes");
-const { eventRouter: evalLinksEventRouter, individualRouter: evalLinksRouter } = require("./routes/evaluationLink.routes");
+const {
+  cohortRouter: traineesCohortRouter,
+  individualRouter: traineesRouter,
+} = require("./routes/trainee.routes");
+const {
+  cohortRouter: eventsCohortRouter,
+  individualRouter: eventsRouter,
+} = require("./routes/event.routes");
+const {
+  eventRouter: teamsEventRouter,
+  individualRouter: teamsRouter,
+} = require("./routes/team.routes");
+const {
+  eventRouter: kpisEventRouter,
+  individualRouter: kpisRouter,
+} = require("./routes/kpi.routes");
+const {
+  eventRouter: evalLinksEventRouter,
+  individualRouter: evalLinksRouter,
+} = require("./routes/evaluationLink.routes");
 const evaluateRouter = require("./routes/evaluate.routes");
 const chatRouter = require("./routes/chat.routes");
 const uploadRouter = require("./routes/upload.routes");
 const completeProfileRouter = require("./routes/completeProfile.routes");
 const completeTeamRouter = require("./routes/completeTeam.routes");
-const { adminRouter: submissionLinksAdminRouter, teamRouter: submissionLinksTeamRouter, publicRouter: submissionLinksPublicRouter } = require("./routes/submissionLink.routes");
-const { eventRouter: deliverablesEventRouter, individualRouter: deliverablesRouter } = require("./routes/deliverable.routes");
+const {
+  adminRouter: submissionLinksAdminRouter,
+  teamRouter: submissionLinksTeamRouter,
+  publicRouter: submissionLinksPublicRouter,
+} = require("./routes/submissionLink.routes");
+const {
+  eventRouter: deliverablesEventRouter,
+  individualRouter: deliverablesRouter,
+} = require("./routes/deliverable.routes");
 const exportRouter = require("./routes/export.routes");
 const notificationRouter = require("./routes/notification.routes");
 const traineePortalRouter = require("./routes/traineePortal.routes");
@@ -87,7 +109,7 @@ app.use("/api/v1/cohorts/:cohortId/briefings", programmeBriefingRouter);
 app.use((_req, res) => {
   sendError(res, 404, {
     code: ERROR_CODES.NOT_FOUND,
-    message: "Route not found.",
+    message: "Route not found",
   });
 });
 
