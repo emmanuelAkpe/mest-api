@@ -109,7 +109,7 @@ app.use("/api/v1/cohorts/:cohortId/briefings", programmeBriefingRouter);
 app.use((_req, res) => {
   sendError(res, 404, {
     code: ERROR_CODES.NOT_FOUND,
-    message: "Route not found",
+    message: "Route not found.",
   });
 });
 
