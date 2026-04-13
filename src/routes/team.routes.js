@@ -2,7 +2,7 @@ const { Router } = require('express');
 const { apiLimiter } = require('../middleware/rateLimiter');
 const { validate } = require('../middleware/validate');
 const { authenticate } = require('../middleware/authenticate');
-const { create, list, getById, update, dissolve, logPivot, logMemberChange, listMemberChanges, sendTeamProfileLink, revokeTeamProfileLink } = require('../controllers/team.controller');
+const { create, list, getById, update, dissolve, logPivot, logMemberChange, listMemberChanges, sendTeamProfileLink, revokeTeamProfileLink, assignMentor } = require('../controllers/team.controller');
 const {
   createTeamValidation,
   updateTeamValidation,
@@ -29,5 +29,6 @@ individualRouter.get('/:id/member-changes', authenticate, listMemberChanges);
 individualRouter.post('/:id/profile-link', authenticate, sendTeamProfileLink);
 individualRouter.post('/:id/profile-link/resend', authenticate, sendTeamProfileLink);
 individualRouter.delete('/:id/profile-link', authenticate, revokeTeamProfileLink);
+individualRouter.patch('/:id/mentor', authenticate, assignMentor);
 
 module.exports = { eventRouter, individualRouter };

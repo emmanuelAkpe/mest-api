@@ -11,6 +11,8 @@ const notificationSchema = new mongoose.Schema(
         'ai_review_ready',
         'deadline_approaching',
         'ai_programme_briefing',
+        'mentor_session_logged',
+        'trainee_feedback_submitted',
       ],
       required: true,
     },

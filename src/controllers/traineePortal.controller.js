@@ -1,5 +1,6 @@
 const crypto = require('crypto')
 const Trainee = require('../models/Trainee.model')
+const TraineeFeedback = require('../models/TraineeFeedback.model')
 const Team = require('../models/Team.model')
 const Event = require('../models/Event.model')
 const KPI = require('../models/KPI.model')
@@ -13,6 +14,7 @@ const { sendTraineePortalOtpEmail } = require('../services/email.service')
 const { generateRawToken } = require('../utils/tokenUtils')
 const { sendSuccess, sendError, ERROR_CODES } = require('../utils/response')
 const { logger } = require('../utils/logger')
+const { createNotification } = require('../services/notification.service')
 
 async function requestOtp(req, res, next) {
   try {
@@ -211,4 +213,96 @@ async function getMe(req, res, next) {
   }
 }
 
-module.exports = { requestOtp, verifyOtp, getMe }
+const FEEDBACK_AREAS = {
+  mentor:     ['helpfulness', 'availability', 'guidance_quality', 'overall'],
+  programme:  ['content_quality', 'pace', 'support', 'overall'],
+  peer:       ['contribution', 'collaboration', 'communication', 'overall'],
+}
+
+async function submitFeedback(req, res, next) {
+  try {
+    const session = await resolveSession(req.headers.authorization)
+    if (!session) return sendError(res, 401, { code: ERROR_CODES.UNAUTHORIZED, message: 'Invalid or expired session.' })
+
+    const trainee = await Trainee.findById(session.trainee).select('_id cohort')
+    if (!trainee) return sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Trainee not found.' })
+
+    const { type, target, ratings, comment } = req.body
+
+    if (!type || !FEEDBACK_AREAS[type]) {
+      return sendError(res, 422, {
+        code: ERROR_CODES.VALIDATION_ERROR,
+        message: `type must be one of: ${Object.keys(FEEDBACK_AREAS).join(', ')}.`,
+      })
+    }
+
+    if (!Array.isArray(ratings) || ratings.length === 0) {
+      return sendError(res, 422, {
+        code: ERROR_CODES.VALIDATION_ERROR,
+        message: 'ratings must be a non-empty array.',
+      })
+    }
+
+    const validAreas = FEEDBACK_AREAS[type]
+    for (const r of ratings) {
+      if (!validAreas.includes(r.area)) {
+        return sendError(res, 422, {
+          code: ERROR_CODES.VALIDATION_ERROR,
+          message: `Invalid area "${r.area}" for type "${type}". Valid: ${validAreas.join(', ')}.`,
+        })
+      }
+      if (typeof r.score !== 'number' || r.score < 1 || r.score > 5) {
+        return sendError(res, 422, {
+          code: ERROR_CODES.VALIDATION_ERROR,
+          message: `score for area "${r.area}" must be a number between 1 and 5.`,
+        })
+      }
+    }
+
+    const targetModelMap = { mentor: 'Admin', peer: 'Trainee', programme: null }
+    const targetModel = targetModelMap[type]
+
+    const feedback = await TraineeFeedback.findOneAndUpdate(
+      { trainee: trainee._id, type, target: target ?? null },
+      {
+        trainee: trainee._id,
+        cohort: trainee.cohort,
+        type,
+        target: target ?? null,
+        targetModel,
+        ratings,
+        comment: comment?.trim() || undefined,
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    )
+
+    setImmediate(async () => {
+      await createNotification({
+        type: 'trainee_feedback_submitted',
+        title: 'Trainee feedback submitted',
+        body: `A trainee submitted ${type} feedback.`,
+        link: null,
+        cohort: trainee.cohort,
+      })
+    })
+
+    return sendSuccess(res, 200, { data: feedback, message: 'Feedback saved.' })
+  } catch (err) {
+    next(err)
+  }
+}
+
+async function listMyFeedback(req, res, next) {
+  try {
+    const session = await resolveSession(req.headers.authorization)
+    if (!session) return sendError(res, 401, { code: ERROR_CODES.UNAUTHORIZED, message: 'Invalid or expired session.' })
+
+    const feedback = await TraineeFeedback.find({ trainee: session.trainee }).sort({ updatedAt: -1 })
+
+    return sendSuccess(res, 200, { data: feedback })
+  } catch (err) {
+    next(err)
+  }
+}
+
+module.exports = { requestOtp, verifyOtp, getMe, submitFeedback, listMyFeedback }

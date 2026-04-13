@@ -50,6 +50,11 @@ const exportRouter = require("./routes/export.routes");
 const notificationRouter = require("./routes/notification.routes");
 const traineePortalRouter = require("./routes/traineePortal.routes");
 const programmeBriefingRouter = require("./routes/programmeBriefing.routes");
+const {
+  teamRouter: mentorSessionTeamRouter,
+  sessionRouter: mentorSessionRouter,
+} = require("./routes/mentorSession.routes");
+const traineeFeedbackRouter = require("./routes/traineeFeedback.routes");
 
 const app = express();
 
@@ -104,6 +109,9 @@ app.use("/api/v1", exportRouter);
 app.use("/api/v1/notifications", notificationRouter);
 app.use("/api/v1/trainee-portal", traineePortalRouter);
 app.use("/api/v1/cohorts/:cohortId/briefings", programmeBriefingRouter);
+app.use("/api/v1/teams", mentorSessionTeamRouter);
+app.use("/api/v1", mentorSessionRouter);
+app.use("/api/v1/cohorts", traineeFeedbackRouter);
 
 // 404
 app.use((_req, res) => {

@@ -364,4 +364,15 @@ function getMe(req, res) {
   });
 }
 
-module.exports = { invite, onboard, login, refresh, logout, getMe, forgotPassword, resetPassword, changePassword, resendInvite };
+async function listAdmins(req, res, next) {
+  try {
+    const admins = await Admin.find({ isActive: true })
+      .select('firstName lastName email role')
+      .sort({ firstName: 1 });
+    sendSuccess(res, 200, { data: admins });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { invite, onboard, login, refresh, logout, getMe, forgotPassword, resetPassword, changePassword, resendInvite, listAdmins };

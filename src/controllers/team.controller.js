@@ -520,4 +520,49 @@ async function revokeTeamProfileLink(req, res, next) {
   }
 }
 
-module.exports = { create, list, getById, update, dissolve, logPivot, logMemberChange, listMemberChanges, sendTeamProfileLink, revokeTeamProfileLink };
+async function assignMentor(req, res, next) {
+  try {
+    const team = await Team.findById(req.params.id).select('_id cohort');
+    if (!team) {
+      return sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Team not found.' });
+    }
+
+    const { mentorId } = req.body;
+
+    if (mentorId !== null && mentorId !== undefined) {
+      const Admin = require('../models/Admin.model');
+      const mentor = await Admin.findById(mentorId).select('_id role isActive');
+      if (!mentor) {
+        return sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Admin not found.' });
+      }
+      if (!mentor.isActive) {
+        return sendError(res, 400, {
+          code: ERROR_CODES.VALIDATION_ERROR,
+          message: 'This admin account is inactive.',
+        });
+      }
+    }
+
+    const updated = await Team.findByIdAndUpdate(
+      team._id,
+      { mentor: mentorId ?? null },
+      { new: true }
+    ).populate('mentor', 'firstName lastName email role');
+
+    logTeamEvent({
+      event: 'team_mentor_assigned',
+      teamId: team._id,
+      mentorId: mentorId ?? null,
+      assignedBy: req.admin.id,
+    });
+
+    return sendSuccess(res, 200, {
+      data: { id: updated._id, mentor: updated.mentor },
+      message: mentorId ? 'Mentor assigned.' : 'Mentor unassigned.',
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { create, list, getById, update, dissolve, logPivot, logMemberChange, listMemberChanges, sendTeamProfileLink, revokeTeamProfileLink, assignMentor };

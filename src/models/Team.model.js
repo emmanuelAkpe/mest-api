@@ -32,6 +32,7 @@ const teamSchema = new mongoose.Schema(
     marketFocus: { type: String, trim: true },
     members: [memberSchema],
     pivots: [pivotSchema],
+    mentor: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', default: null },
     isDissolved: { type: Boolean, default: false },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
   },
