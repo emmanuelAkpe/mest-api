@@ -9,6 +9,7 @@ const adminSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, select: false },
     role: { type: String, enum: ['super_admin', 'program_admin', 'mentor'], default: 'program_admin' },
+    photo: { type: String, trim: true, default: null },
     isActive: { type: Boolean, default: false },
     lastLogin: { type: Date },
     refreshTokens: { type: [String], default: [] },

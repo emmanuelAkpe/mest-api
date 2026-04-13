@@ -358,10 +358,45 @@ async function resendInvite(req, res, next) {
 }
 
 function getMe(req, res) {
-  const { id, firstName, lastName, email, role, lastLogin, createdAt } = req.admin;
+  const { id, firstName, lastName, email, role, photo, lastLogin, createdAt } = req.admin;
   sendSuccess(res, 200, {
-    data: { id, firstName, lastName, email, role, lastLogin, createdAt },
+    data: { id, firstName, lastName, email, role, photo: photo ?? null, lastLogin, createdAt },
   });
+}
+
+async function updateProfile(req, res, next) {
+  try {
+    const { firstName, lastName, photo } = req.body;
+
+    const admin = await Admin.findById(req.admin.id);
+    if (!admin) {
+      return sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Admin not found.' });
+    }
+
+    if (firstName?.trim()) admin.firstName = firstName.trim();
+    if (lastName?.trim()) admin.lastName = lastName.trim();
+    if (photo !== undefined) admin.photo = photo ?? null;
+
+    await admin.save();
+
+    logAuthEvent({ event: 'profile_updated', adminId: admin.id, ip: getIp(req), userAgent: getUserAgent(req) });
+
+    sendSuccess(res, 200, {
+      data: {
+        id: admin.id,
+        firstName: admin.firstName,
+        lastName: admin.lastName,
+        email: admin.email,
+        role: admin.role,
+        photo: admin.photo ?? null,
+        lastLogin: admin.lastLogin,
+        createdAt: admin.createdAt,
+      },
+      message: 'Profile updated.',
+    });
+  } catch (err) {
+    next(err);
+  }
 }
 
 async function listAdmins(req, res, next) {
@@ -375,4 +410,4 @@ async function listAdmins(req, res, next) {
   }
 }
 
-module.exports = { invite, onboard, login, refresh, logout, getMe, forgotPassword, resetPassword, changePassword, resendInvite, listAdmins };
+module.exports = { invite, onboard, login, refresh, logout, getMe, updateProfile, forgotPassword, resetPassword, changePassword, resendInvite, listAdmins };
