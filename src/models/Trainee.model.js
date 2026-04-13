@@ -7,7 +7,7 @@ const traineeSchema = new mongoose.Schema(
     cohort: { type: mongoose.Schema.Types.ObjectId, ref: 'Cohort', required: true },
     firstName: { type: String, required: true, trim: true },
     lastName: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    email: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
     country: { type: String, required: true, trim: true },
     photo: { type: String, trim: true },
     bio: { type: String, trim: true },           // Experience

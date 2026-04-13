@@ -17,14 +17,16 @@ const urlField = (field) =>
 const createTraineeValidation = [
   body('firstName').trim().notEmpty().withMessage('First name is required.'),
   body('lastName').trim().notEmpty().withMessage('Last name is required.'),
-  body('email').isEmail().normalizeEmail().withMessage('Valid email is required.'),
+  body('email').optional({ nullable: true, checkFalsy: true }).isEmail().normalizeEmail().withMessage('Valid email is required.'),
   body('country').trim().notEmpty().withMessage('Country is required.'),
   urlField('photo'),
-  body('bio')
-    .optional()
-    .trim()
-    .isLength({ max: 1000 })
-    .withMessage('Bio must not exceed 1000 characters.'),
+  body('bio').optional().trim().isLength({ max: 1000 }).withMessage('Bio must not exceed 1000 characters.'),
+  body('education').optional().trim().isLength({ max: 500 }).withMessage('Education must not exceed 500 characters.'),
+  body('top3Skills').optional().trim().isLength({ max: 500 }).withMessage('Top 3 skills must not exceed 500 characters.'),
+  body('coreTechSkills').optional().trim().isLength({ max: 500 }).withMessage('Core tech skills must not exceed 500 characters.'),
+  body('industriesOfInterest').optional().trim().isLength({ max: 500 }).withMessage('Industries of interest must not exceed 500 characters.'),
+  body('whyMEST').optional().trim().isLength({ max: 1000 }).withMessage('Why MEST must not exceed 1000 characters.'),
+  body('funFact').optional().trim().isLength({ max: 500 }).withMessage('Fun fact must not exceed 500 characters.'),
   skillLevelField('technicalBackground'),
   skillLevelField('aiSkillLevel'),
   urlField('linkedIn'),
@@ -44,14 +46,16 @@ const createTraineeValidation = [
 const updateTraineeValidation = [
   body('firstName').optional().trim().notEmpty().withMessage('First name cannot be empty.'),
   body('lastName').optional().trim().notEmpty().withMessage('Last name cannot be empty.'),
-  body('email').optional().isEmail().normalizeEmail().withMessage('Valid email is required.'),
+  body('email').optional({ nullable: true, checkFalsy: true }).isEmail().normalizeEmail().withMessage('Valid email is required.'),
   body('country').optional().trim().notEmpty().withMessage('Country cannot be empty.'),
   urlField('photo'),
-  body('bio')
-    .optional()
-    .trim()
-    .isLength({ max: 1000 })
-    .withMessage('Bio must not exceed 1000 characters.'),
+  body('bio').optional().trim().isLength({ max: 1000 }).withMessage('Bio must not exceed 1000 characters.'),
+  body('education').optional().trim().isLength({ max: 500 }).withMessage('Education must not exceed 500 characters.'),
+  body('top3Skills').optional().trim().isLength({ max: 500 }).withMessage('Top 3 skills must not exceed 500 characters.'),
+  body('coreTechSkills').optional().trim().isLength({ max: 500 }).withMessage('Core tech skills must not exceed 500 characters.'),
+  body('industriesOfInterest').optional().trim().isLength({ max: 500 }).withMessage('Industries of interest must not exceed 500 characters.'),
+  body('whyMEST').optional().trim().isLength({ max: 1000 }).withMessage('Why MEST must not exceed 1000 characters.'),
+  body('funFact').optional().trim().isLength({ max: 500 }).withMessage('Fun fact must not exceed 500 characters.'),
   skillLevelField('technicalBackground'),
   skillLevelField('aiSkillLevel'),
   urlField('linkedIn'),

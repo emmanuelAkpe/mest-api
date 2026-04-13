@@ -72,6 +72,7 @@ async function create(req, res, next) {
 
     const {
       firstName, lastName, email, country, photo, bio,
+      education, top3Skills, coreTechSkills, industriesOfInterest, whyMEST, funFact,
       technicalBackground, aiSkillLevel, linkedIn, github,
       portfolio, entryScore, notes,
     } = req.body;
@@ -80,10 +81,16 @@ async function create(req, res, next) {
       cohort: cohortId,
       firstName,
       lastName,
-      email,
+      email: email || undefined,
       country,
       photo,
       bio,
+      education,
+      top3Skills,
+      coreTechSkills,
+      industriesOfInterest,
+      whyMEST,
+      funFact,
       technicalBackground,
       aiSkillLevel,
       linkedIn,
@@ -172,7 +179,7 @@ async function getById(req, res, next) {
       return;
     }
 
-    sendSuccess(res, 200, { data: formatTrainee(trainee, { includeNotes: true }) });
+    sendSuccess(res, 200, { data: { trainee: formatTrainee(trainee, { includeNotes: true }) } });
   } catch (err) {
     next(err);
   }
@@ -189,6 +196,7 @@ async function update(req, res, next) {
 
     const fields = [
       'firstName', 'lastName', 'email', 'country', 'photo', 'bio',
+      'education', 'top3Skills', 'coreTechSkills', 'industriesOfInterest', 'whyMEST', 'funFact',
       'technicalBackground', 'aiSkillLevel', 'linkedIn', 'github',
       'portfolio', 'entryScore', 'notes', 'isActive',
     ];
