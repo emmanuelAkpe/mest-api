@@ -3,6 +3,7 @@ const Event = require('../models/Event.model');
 const { sendSuccess, sendError, ERROR_CODES } = require('../utils/response');
 const { logger } = require('../utils/logger');
 const { getIp, getUserAgent } = require('../utils/request');
+const { generateKpiSuggestion } = require('../services/gemini.service');
 
 function logKPIEvent(meta) {
   logger.info('KPI event', meta);
@@ -239,4 +240,18 @@ async function remove(req, res, next) {
   }
 }
 
-module.exports = { list, create, update, remove };
+async function generate(req, res, next) {
+  try {
+    const { name, scaleType = '1_to_10', appliesTo = 'team' } = req.body;
+    if (!name) {
+      sendError(res, 400, { code: ERROR_CODES.VALIDATION_ERROR, message: 'name is required.' });
+      return;
+    }
+    const suggestion = await generateKpiSuggestion({ name, scaleType, appliesTo });
+    sendSuccess(res, 200, { data: suggestion });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { list, create, update, remove, generate };

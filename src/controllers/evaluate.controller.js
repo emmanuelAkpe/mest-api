@@ -78,6 +78,7 @@ async function getForm(req, res, next) {
           requireComment: k.requireComment,
           showRecommendation: k.showRecommendation,
           order: k.order,
+          rubric: k.rubric ?? [],
         })),
         existingSubmission: existingSubmission
           ? { teamScores: existingSubmission.teamScores, submittedAt: existingSubmission.submittedAt }

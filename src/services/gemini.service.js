@@ -145,4 +145,60 @@ Be specific. Reference actual scores, actual judge comments, and actual team nam
   return JSON.parse(clean);
 }
 
-module.exports = { generateEvaluationInsights };
+const OPENAI_BASE = 'https://api.openai.com/v1/chat/completions';
+const KPI_MODEL = 'gpt-4o';
+
+async function generateKpiSuggestion({ name, scaleType, appliesTo }) {
+  const scaleLabel = scaleType === '1_to_5' ? '1 to 5'
+    : scaleType === '1_to_10' ? '1 to 10'
+    : scaleType === 'percentage' ? '0 to 100'
+    : 'custom';
+
+  const scorePoints = scaleType === '1_to_5' ? [1, 2, 3, 4, 5]
+    : scaleType === '1_to_10' ? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    : scaleType === 'percentage' ? [0, 25, 50, 75, 100]
+    : [];
+
+  const prompt = `You are helping design a KPI evaluation rubric for a startup accelerator programme (MEST Africa).
+
+KPI Name: "${name}"
+Scale: ${scaleLabel}
+Applies to: ${appliesTo}
+${scorePoints.length > 0 ? `Score points: ${scorePoints.join(', ')}` : ''}
+
+Return ONLY valid JSON with this exact shape (no markdown, no commentary):
+{
+  "description": "One sentence describing what this KPI measures and why it matters.",
+  "rubric": [
+    { "score": <number>, "label": "<2-3 word label>", "description": "<One sentence of what this score level looks like in practice.>" }
+  ]
+}
+
+Generate a rubric entry for EACH score point. Labels should be concise (e.g. "Vague", "Basic", "Solid", "Strong", "Exceptional"). Descriptions should be specific and actionable for evaluators judging startup teams.`;
+
+  const res = await fetch(OPENAI_BASE, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: KPI_MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+      temperature: 0.4,
+      max_tokens: 1024,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`OpenAI API error ${res.status}: ${body}`);
+  }
+
+  const data = await res.json();
+  const text = data.choices?.[0]?.message?.content ?? '';
+  return JSON.parse(text);
+}
+
+module.exports = { generateEvaluationInsights, generateKpiSuggestion };
