@@ -7,7 +7,6 @@ const cookieParser = require("cookie-parser");
 const { connectDB } = require("./config/db");
 const { env } = require("./config/env");
 const { logger, morganStream } = require("./utils/logger");
-const { globalLimiter } = require("./middleware/rateLimiter");
 const { errorHandler } = require("./middleware/errorHandler");
 const { sendError, ERROR_CODES } = require("./utils/response");
 const authRoutes = require("./routes/auth.routes");
@@ -61,9 +60,6 @@ const app = express();
 // Security
 app.use(helmet());
 app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
-
-// Rate limiting (global)
-app.use(globalLimiter);
 
 // Request parsing
 app.use(express.json());

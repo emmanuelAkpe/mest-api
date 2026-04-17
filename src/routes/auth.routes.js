@@ -1,13 +1,10 @@
 const { Router } = require('express');
-const { authLimiter } = require('../middleware/rateLimiter');
 const { validate } = require('../middleware/validate');
 const { authenticate, requireRole } = require('../middleware/authenticate');
 const { invite, onboard, login, refresh, logout, getMe, updateProfile, forgotPassword, resetPassword, changePassword, resendInvite, listAdmins } = require('../controllers/auth.controller');
 const { inviteValidation, onboardValidation, loginValidation, forgotPasswordValidation, resetPasswordValidation, changePasswordValidation, resendInviteValidation } = require('../validators/auth.validators');
 
 const router = Router();
-
-router.use(authLimiter);
 
 router.post('/invite', authenticate, requireRole('super_admin'), inviteValidation, validate, invite);
 router.post('/onboard', onboardValidation, validate, onboard);
