@@ -6,6 +6,7 @@ const KPI = require('../models/KPI.model')
 const EvaluationSubmission = require('../models/EvaluationSubmission.model')
 const EvaluationInsight = require('../models/EvaluationInsight.model')
 const EvaluationFeedbackLetter = require('../models/EvaluationFeedbackLetter.model')
+const EvaluationLink = require('../models/EvaluationLink.model')
 const SubmissionLink = require('../models/SubmissionLink.model')
 const MentorSession = require('../models/MentorSession.model')
 const TeamPortalSession = require('../models/TeamPortalSession.model')
@@ -119,12 +120,13 @@ async function getPortalData(req, res, next) {
     // Fetch event data in parallel
     const eventDataList = await Promise.all(
       eventIds.map(async (eventId) => {
-        const [event, kpis, insight, feedbackLetter, submissionLinks] = await Promise.all([
+        const [event, kpis, insight, feedbackLetter, submissionLinks, evalLinks] = await Promise.all([
           Event.findById(eventId).select('name type startDate endDate'),
           KPI.find({ event: eventId }).sort({ order: 1, createdAt: 1 }),
           EvaluationInsight.findOne({ event: eventId }),
           EvaluationFeedbackLetter.findOne({ team: team._id, event: eventId }),
           SubmissionLink.find({ team: team._id, event: eventId }).select('title deadline submissions token'),
+          EvaluationLink.find({ event: eventId, teams: team._id, isRevoked: false }).select('status'),
         ])
 
         if (!event) return null
@@ -239,6 +241,11 @@ async function getPortalData(req, res, next) {
             kpis: kpiResults,
             overallComments,
             evaluators,
+            feedbackStatus: {
+              total: evalLinks.length,
+              submitted: evalLinks.filter((l) => l.status === 'submitted').length,
+              pending: evalLinks.filter((l) => l.status !== 'submitted').length,
+            },
             insight: teamInsight,
           },
           deliverables,
