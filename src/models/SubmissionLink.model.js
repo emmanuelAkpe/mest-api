@@ -36,8 +36,9 @@ const submissionLinkSchema = new mongoose.Schema(
     acceptedTypes:  [{ type: String, enum: FILE_TYPES }],
     deadline:       { type: Date, required: true },
     submissions:    [submissionItemSchema],
-    accessSessions: { type: [accessSessionSchema], select: false },
-    createdBy:      { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
+    accessSessions:      { type: [accessSessionSchema], select: false },
+    lastReminderSentAt:  { type: Date },
+    createdBy:           { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
   },
   { timestamps: true }
 );

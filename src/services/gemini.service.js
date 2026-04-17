@@ -201,4 +201,166 @@ Generate a rubric entry for EACH score point. Labels should be concise (e.g. "Va
   return JSON.parse(text);
 }
 
-module.exports = { generateEvaluationInsights, generateKpiSuggestion };
+async function generateTeamFeedbackLetters({ event, teams, scoreData, insights }) {
+  const teamSections = teams.map((team) => {
+    const sd = scoreData[team.id] ?? { kpis: [], overallComments: [] };
+    const teamInsight = insights?.teamAnalyses?.find(
+      (t) => t.teamId === team.id || t.teamName === team.name
+    );
+
+    const kpiLines = sd.kpis
+      .filter((k) => k.avg !== null || k.comments.length > 0)
+      .map((k) => {
+        const scaleCtx = k.scaleMax ? ` / ${k.scaleMax}` : '';
+        const lines = [`  ${k.name}${k.avg !== null ? ` — avg ${k.avg}${scaleCtx}` : ''}`];
+        if (k.comments.length) {
+          lines.push(`    Direct feedback:`);
+          k.comments.forEach((c) => lines.push(`      • "${c}"`));
+        }
+        if (k.recommendations.length) {
+          lines.push(`    Recommendations:`);
+          k.recommendations.forEach((r) => lines.push(`      • "${r}"`));
+        }
+        return lines.join('\n');
+      }).join('\n');
+
+    const insightBlock = teamInsight ? [
+      teamInsight.verdict        ? `  Verdict: ${teamInsight.verdict}` : null,
+      teamInsight.strengths?.length  ? `  Strengths: ${teamInsight.strengths.join('; ')}` : null,
+      teamInsight.improvements?.length ? `  Improvements: ${teamInsight.improvements.join('; ')}` : null,
+      teamInsight.recommendation ? `  Key recommendation: ${teamInsight.recommendation}` : null,
+      teamInsight.readinessLevel ? `  Readiness: ${teamInsight.readinessLevel.replace(/_/g, ' ')}` : null,
+    ].filter(Boolean).join('\n') : null;
+
+    return [
+      `TEAM ID: ${team.id}`,
+      `TEAM NAME: ${team.name}`,
+      team.productIdea ? `Product idea: ${team.productIdea}` : null,
+      team.marketFocus ? `Target market: ${team.marketFocus}` : null,
+      kpiLines         ? `Evaluation data:\n${kpiLines}` : null,
+      sd.overallComments.length
+        ? `Overall panel observations:\n${sd.overallComments.map((c) => `  • "${c}"`).join('\n')}`
+        : null,
+      insightBlock     ? `AI analysis:\n${insightBlock}` : null,
+    ].filter(Boolean).join('\n');
+  }).join('\n\n---\n\n');
+
+  const prompt = `You are the Programme Director at MEST (Meltwater Entrepreneurial School of Technology), Africa's leading startup accelerator. You are writing official post-evaluation feedback letters to startup teams.
+
+EVENT: ${event.name}
+
+Write a unique, professional, specific, and genuinely useful written feedback letter for EACH team. These letters will be sent directly to the founders.
+
+STRICT RULES:
+- Never mention judges, evaluators, or experts in any form — speak as a single unified MEST institutional voice ("we observed", "your team demonstrated", "the panel noted", "feedback highlighted")
+- Use scores to calibrate your language: scores ≥70% of scale max = strong performance, 40–69% = developing, <40% = needs significant work — translate into qualitative terms, never state the raw number
+- You MAY weave in paraphrased or lightly-edited verbatim observations from the comments/overall notes — but remove any attribution (no "one judge said", no names) — present them as collective MEST observations
+- Every specific claim you make MUST be directly traceable to the evaluation data provided — zero fabrication
+- Every letter must be completely unique — directly reference that team's specific product, market, and actual evaluation observations — zero generic phrases
+- Write exactly 3 paragraphs: (1) overall performance and context, (2) specific strengths with concrete examples drawn from the data, (3) specific areas to develop with clear, actionable guidance grounded in the evaluation
+- Tone: authoritative but warm — like a mentor who respects the team enough to be direct and honest
+- Open every letter with: "Thank you for your participation in ${event.name}."
+- Do NOT include greetings (Dear...), sign-offs, subject lines, or headers — body paragraphs only
+
+TEAM DATA:
+${teamSections}
+
+Return ONLY valid JSON (no markdown fences):
+{
+  "letters": [
+    { "teamId": "<exact team id>", "teamName": "<name>", "letter": "<3 paragraphs separated by \\n\\n>" }
+  ]
+}
+
+Target 200–260 words per letter. Be specific, direct, and useful. Generic startup advice is not acceptable.`;
+
+  const res = await fetch(OPENAI_BASE, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+    body: JSON.stringify({
+      model: KPI_MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+      temperature: 0.65,
+      max_tokens: 4096,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`OpenAI API error ${res.status}: ${body}`);
+  }
+
+  const data = await res.json();
+  const text = data.choices?.[0]?.message?.content ?? '';
+  const parsed = JSON.parse(text);
+  return parsed.letters ?? [];
+}
+
+async function generateSubmissionSummary({ submission, scoringStyle }) {
+  const teamBlocks = submission.teamScores.map((ts) => {
+    const kpiLines = ts.scores.map((s) => {
+      const lines = [`    - ${s.kpi.name}: ${s.score}`];
+      if (s.comment) lines.push(`      Comment: "${s.comment}"`);
+      if (s.recommendation) lines.push(`      Recommendation: "${s.recommendation}"`);
+      return lines.join('\n');
+    }).join('\n');
+
+    return [
+      `## ${ts.team.name}`,
+      ts.overallComment ? `  Overall comment: "${ts.overallComment}"` : null,
+      `  KPI scores:\n${kpiLines}`,
+    ].filter(Boolean).join('\n');
+  }).join('\n\n');
+
+  const prompt = `You are analyzing a single judge's evaluation from a MEST Africa startup pitch event.
+
+EVALUATOR: ${submission.evaluatorName}
+SCORING STYLE (computed): ${scoringStyle} — ${
+    scoringStyle === 'strict' ? 'scored below the group average' :
+    scoringStyle === 'generous' ? 'scored above the group average' :
+    'scored close to the group average'
+  }
+
+EVALUATION DATA:
+${teamBlocks}
+
+Return ONLY valid JSON matching this exact schema — no markdown, no preamble:
+{
+  "overallTake": "2–3 sentences on this evaluator's perspective, tone, and what they emphasised across all teams",
+  "scoringStyle": "${scoringStyle}",
+  "keyThemes": ["3–5 specific themes that appear consistently across their comments"],
+  "teamHighlights": [
+    { "teamName": "<name>", "observation": "The most notable thing this evaluator said or scored for this team" }
+  ],
+  "standoutComment": "The single most insightful or impactful thing this evaluator wrote, verbatim if possible"
+}
+
+Be specific — reference actual team names, actual scores, actual comments. Do not be generic.`;
+
+  const res = await fetch(OPENAI_BASE, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: KPI_MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+      temperature: 0.4,
+      max_tokens: 1024,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`OpenAI API error ${res.status}: ${body}`);
+  }
+
+  const data = await res.json();
+  const text = data.choices?.[0]?.message?.content ?? '';
+  return JSON.parse(text);
+}
+
+module.exports = { generateEvaluationInsights, generateKpiSuggestion, generateSubmissionSummary, generateTeamFeedbackLetters };

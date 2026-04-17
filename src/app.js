@@ -54,6 +54,7 @@ const {
   sessionRouter: mentorSessionRouter,
 } = require("./routes/mentorSession.routes");
 const traineeFeedbackRouter = require("./routes/traineeFeedback.routes");
+const teamPortalRouter = require("./routes/teamPortal.routes");
 
 const app = express();
 
@@ -108,6 +109,7 @@ app.use("/api/v1/cohorts/:cohortId/briefings", programmeBriefingRouter);
 app.use("/api/v1/teams", mentorSessionTeamRouter);
 app.use("/api/v1", mentorSessionRouter);
 app.use("/api/v1/cohorts", traineeFeedbackRouter);
+app.use("/api/v1/team-portal", teamPortalRouter);
 
 // 404
 app.use((_req, res) => {

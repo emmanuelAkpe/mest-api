@@ -8,7 +8,7 @@ const { sendSuccess, sendError, ERROR_CODES } = require('../utils/response');
 const { logger } = require('../utils/logger');
 const { getIp, getUserAgent } = require('../utils/request');
 const { generateRawToken, hashEvaluationToken } = require('../utils/tokenUtils');
-const { sendTeamCompletionEmail } = require('../services/email.service');
+const { sendTeamCompletionEmail, sendTeamPortalInviteEmail } = require('../services/email.service');
 const { env } = require('../config/env');
 
 function logTeamEvent(meta) {
@@ -565,4 +565,40 @@ async function assignMentor(req, res, next) {
   }
 }
 
-module.exports = { create, list, getById, update, dissolve, logPivot, logMemberChange, listMemberChanges, sendTeamProfileLink, revokeTeamProfileLink, assignMentor };
+async function sendPortalInvite(req, res, next) {
+  try {
+    const { id } = req.params;
+    const team = await Team.findById(id)
+      .populate('members.trainee', 'firstName email')
+      .select('name members');
+    if (!team) {
+      sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Team not found.' });
+      return;
+    }
+
+    const recipients = team.members
+      .map((m) => m.trainee)
+      .filter((t) => t?.email);
+
+    if (recipients.length === 0) {
+      sendError(res, 400, { code: ERROR_CODES.VALIDATION_ERROR, message: 'No team members have an email address on file.' });
+      return;
+    }
+
+    const portalUrl = `${env.FRONTEND_URL || 'http://localhost:5173'}/team-portal`;
+
+    await Promise.allSettled(
+      recipients.map((trainee) =>
+        sendTeamPortalInviteEmail({ to: trainee.email, firstName: trainee.firstName, teamName: team.name, portalUrl })
+          .catch((err) => logger.warn('Team portal invite email failed', { email: trainee.email, err: err?.message }))
+      )
+    );
+
+    logTeamEvent({ event: 'portal_invite_sent', teamId: id, sentTo: recipients.length, by: req.admin.id });
+    sendSuccess(res, 200, { data: { sentTo: recipients.length }, message: `Portal invite sent to ${recipients.length} member(s).` });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { create, list, getById, update, dissolve, logPivot, logMemberChange, listMemberChanges, sendTeamProfileLink, revokeTeamProfileLink, assignMentor, sendPortalInvite };

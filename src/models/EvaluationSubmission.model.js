@@ -27,6 +27,7 @@ const evaluationSubmissionSchema = new mongoose.Schema(
     evaluatorEmail: { type: String, trim: true },
     teamScores: [teamScoreSchema],
     submittedAt: { type: Date },
+    aiSummary: { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { timestamps: true }
 );
