@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs cat *)",
+      "Bash(/Users/kod/Desktop/web/mest/mest-admin/node_modules/.bin/tsc --noEmit --project /Users/kod/Desktop/web/mest/mest-admin/tsconfig.json)"
+    ]
+  }
+}

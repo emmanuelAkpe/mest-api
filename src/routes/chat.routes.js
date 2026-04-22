@@ -1,9 +1,11 @@
 const { Router } = require('express');
 const { authenticate } = require('../middleware/authenticate');
-const { chat, listSessions, getSession } = require('../controllers/chat.controller');
+const { chat, pollJob, listSessions, getSession } = require('../controllers/chat.controller');
 
 const router = Router();
+
 router.post('/', authenticate, chat);
+router.get('/poll/:jobId', authenticate, pollJob);
 router.get('/sessions', authenticate, listSessions);
 router.get('/sessions/:id', authenticate, getSession);
 

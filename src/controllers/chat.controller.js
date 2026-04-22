@@ -1,7 +1,18 @@
+const crypto = require('crypto');
 const ChatSession = require('../models/ChatSession.model');
 const { runAgentStream } = require('../services/mestAgent.service');
-const { sendError, ERROR_CODES } = require('../utils/response');
+const { sendSuccess, sendError, ERROR_CODES } = require('../utils/response');
 const { logger } = require('../utils/logger');
+
+// In-memory job store — keyed by jobId, TTL 15 min
+const jobs = new Map();
+
+setInterval(() => {
+  const cutoff = Date.now() - 15 * 60 * 1000;
+  for (const [id, job] of jobs) {
+    if (job.createdAt < cutoff) jobs.delete(id);
+  }
+}, 5 * 60 * 1000);
 
 async function chat(req, res, next) {
   try {
@@ -12,7 +23,6 @@ async function chat(req, res, next) {
       return;
     }
 
-    // Load or create session
     let session;
     if (sessionId) {
       session = await ChatSession.findOne({ _id: sessionId, admin: req.admin.id });
@@ -21,64 +31,70 @@ async function chat(req, res, next) {
       session = new ChatSession({ admin: req.admin.id, messages: [] });
     }
 
-    // Keep last 20 messages for context (exclude the new user message)
     const historyForAgent = session.messages.slice(-20).map((m) => ({
       role: m.role,
       content: m.content,
     }));
 
-    // Add user message to session
     session.messages.push({ role: 'user', content: message.trim() });
+    await session.save();
 
-    // SSE headers
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no');
-    res.flushHeaders();
+    const jobId = crypto.randomUUID();
+    jobs.set(jobId, {
+      adminId: req.admin.id.toString(),
+      events: [],
+      done: false,
+      createdAt: Date.now(),
+    });
 
-    const sendEvent = (data) => {
-      if (!res.writableEnded) {
-        res.write(`data: ${JSON.stringify(data)}\n\n`);
-        if (typeof res.flush === 'function') res.flush();
-      }
-    };
+    // Respond immediately — no long-lived connection
+    sendSuccess(res, 200, { data: { jobId, sessionId: session.id } });
 
-    // Keep connection alive through proxies — send a ping data event every 10s
-    const heartbeat = setInterval(() => {
-      if (!res.writableEnded) {
-        res.write('data: {"type":"ping"}\n\n');
-        if (typeof res.flush === 'function') res.flush();
-      }
-    }, 10000);
-
-    req.on('close', () => clearInterval(heartbeat));
-
-    // Send session ID immediately so client can track it
-    sendEvent({ type: 'session', sessionId: session.id });
-
-    let agentResponse = '';
-    try {
-      agentResponse = await runAgentStream({
-        messages: historyForAgent,
-        userMessage: message.trim(),
-        context: context ?? {},
-        onEvent: sendEvent,
+    // Run agent in the background
+    const job = jobs.get(jobId);
+    runAgentStream({
+      messages: historyForAgent,
+      userMessage: message.trim(),
+      context: context ?? {},
+      onEvent: (event) => job.events.push(event),
+    })
+      .then(async (agentResponse) => {
+        session.messages.push({ role: 'assistant', content: agentResponse });
+        await session.save();
+      })
+      .catch((err) => {
+        logger.error('Agent error', { err: err.message, stack: err.stack });
+        job.events.push({ type: 'error', message: err.message || 'Intelligence service unavailable.' });
+      })
+      .finally(() => {
+        job.done = true;
       });
-    } catch (err) {
-      logger.error('Agent error', { err: err.message, stack: err.stack });
-      sendEvent({ type: 'error', message: err.message || 'Intelligence service unavailable. Please try again.' });
-      clearInterval(heartbeat);
-      res.end();
+  } catch (err) {
+    next(err);
+  }
+}
+
+async function pollJob(req, res, next) {
+  try {
+    const { jobId } = req.params;
+    const cursor = parseInt(req.query.cursor ?? '0', 10);
+
+    const job = jobs.get(jobId);
+    if (!job) {
+      sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Job not found or expired.' });
       return;
     }
 
-    // Persist model response
-    session.messages.push({ role: 'assistant', content: agentResponse });
-    await session.save();
+    if (job.adminId !== req.admin.id.toString()) {
+      sendError(res, 403, { code: ERROR_CODES.FORBIDDEN, message: 'Forbidden.' });
+      return;
+    }
 
-    clearInterval(heartbeat);
-    res.end();
+    const newEvents = job.events.slice(cursor);
+
+    sendSuccess(res, 200, {
+      data: { events: newEvents, cursor: job.events.length, done: job.done },
+    });
   } catch (err) {
     next(err);
   }
@@ -90,7 +106,7 @@ async function listSessions(req, res, next) {
       .select('title createdAt updatedAt')
       .sort({ updatedAt: -1 })
       .limit(20);
-    res.json({ success: true, data: { sessions } });
+    sendSuccess(res, 200, { data: { sessions } });
   } catch (err) {
     next(err);
   }
@@ -103,10 +119,10 @@ async function getSession(req, res, next) {
       sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Session not found.' });
       return;
     }
-    res.json({ success: true, data: { session } });
+    sendSuccess(res, 200, { data: { session } });
   } catch (err) {
     next(err);
   }
 }
 
-module.exports = { chat, listSessions, getSession };
+module.exports = { chat, pollJob, listSessions, getSession };
