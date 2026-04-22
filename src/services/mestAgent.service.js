@@ -188,7 +188,7 @@ async function runAgentStream({ messages, userMessage, context, onEvent }) {
 
   const chatMessages = [
     { role: 'system', content: buildSystemPrompt() },
-    ...messages.map((m) => ({ role: m.role, content: m.content })),
+    ...messages.map((m) => ({ role: m.role === 'model' ? 'assistant' : m.role, content: m.content })),
     { role: 'user', content: fullUserMessage },
   ];
 
