@@ -44,13 +44,13 @@ async function chat(req, res, next) {
       }
     };
 
-    // Keep connection alive through proxies — send a comment every 15s
+    // Keep connection alive through proxies — send a ping data event every 10s
     const heartbeat = setInterval(() => {
       if (!res.writableEnded) {
-        res.write(': heartbeat\n\n');
+        res.write('data: {"type":"ping"}\n\n');
         if (typeof res.flush === 'function') res.flush();
       }
-    }, 15000);
+    }, 10000);
 
     req.on('close', () => clearInterval(heartbeat));
 
