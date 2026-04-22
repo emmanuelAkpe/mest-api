@@ -59,7 +59,7 @@ async function chat(req, res, next) {
       onEvent: (event) => job.events.push(event),
     })
       .then(async (agentResponse) => {
-        session.messages.push({ role: 'assistant', content: agentResponse });
+        session.messages.push({ role: 'model', content: agentResponse });
         await session.save();
       })
       .catch((err) => {
