@@ -419,21 +419,23 @@ async function getAnalytics(req, res, next) {
       .lean();
     const eventIds = events.map((e) => e._id.toString());
 
-    const [kpis, submissions, allTeams] = await Promise.all([
+    const [kpis, submissions, allTeams, traineeCount] = await Promise.all([
       KPI.find({ event: { $in: eventIds } }).lean(),
       EvaluationSubmission.find({ event: { $in: eventIds } }).lean(),
-      Team.find({ cohort: cohortId }).select('name event isDissolved members').lean(),
+      Team.find({ cohort: cohortId })
+        .populate('members.trainee', 'firstName lastName')
+        .select('name productIdea marketFocus event isDissolved status members')
+        .lean(),
+      Trainee.countDocuments({ cohort: cohortId }),
     ]);
 
     // ── Event Performance ──
+    const now = new Date();
     const eventPerformance = await Promise.all(events.map(async (event) => {
       const eid = event._id.toString();
       const eventKpis = kpis.filter((k) => k.event?.toString() === eid);
       const eventSubs = submissions.filter((s) => s.event?.toString() === eid);
-
-      // Include teams from parent event (sessions)
-      const eventTeamIds = [eid];
-      const eventTeams = allTeams.filter((t) => eventTeamIds.includes(t.event?.toString()));
+      const eventTeams = allTeams.filter((t) => t.event?.toString() === eid);
 
       const teamScoreMap = {};
       for (const team of eventTeams) teamScoreMap[team._id.toString()] = { name: team.name, scores: [] };
@@ -451,27 +453,32 @@ async function getAnalytics(req, res, next) {
       }
 
       const teamScores = Object.entries(teamScoreMap)
-        .map(([tid, data]) => {
-          if (data.scores.length === 0) return null;
-          return {
-            teamId: tid,
-            teamName: data.name,
-            avgNormalizedScore: Math.round(data.scores.reduce((a, b) => a + b, 0) / data.scores.length),
-          };
-        })
-        .filter(Boolean)
-        .sort((a, b) => b.avgNormalizedScore - a.avgNormalizedScore);
+        .map(([tid, data]) => ({
+          teamId: tid,
+          teamName: data.name,
+          avgNormalizedScore: data.scores.length > 0
+            ? Math.round(data.scores.reduce((a, b) => a + b, 0) / data.scores.length)
+            : null,
+          evaluated: data.scores.length > 0,
+        }))
+        .sort((a, b) => (b.avgNormalizedScore ?? -1) - (a.avgNormalizedScore ?? -1));
 
-      const allScores = teamScores.map((t) => t.avgNormalizedScore);
-      const avgNormalizedScore = allScores.length > 0
-        ? Math.round(allScores.reduce((a, b) => a + b, 0) / allScores.length)
+      const scoredTeams = teamScores.filter((t) => t.avgNormalizedScore !== null);
+      const avgNormalizedScore = scoredTeams.length > 0
+        ? Math.round(scoredTeams.reduce((s, t) => s + t.avgNormalizedScore, 0) / scoredTeams.length)
         : null;
+
+      const startDate = new Date(event.startDate);
+      const endDate = new Date(event.endDate);
+      const eventStatus = now < startDate ? 'upcoming' : now > endDate ? 'completed' : 'active';
 
       return {
         eventId: eid,
         eventName: event.name,
         eventType: event.type,
+        status: eventStatus,
         date: event.startDate,
+        endDate: event.endDate,
         submissionCount: eventSubs.length,
         teamCount: eventTeams.length,
         avgNormalizedScore,
@@ -491,8 +498,7 @@ async function getAnalytics(req, res, next) {
         for (const s of ts.scores) {
           const kpi = kpis.find((k) => k._id.toString() === s.kpi?.toString());
           if (!kpi) continue;
-          const kid = kpi._id.toString();
-          kpiMap[kid].scores.push(normalizeScore(s.score, kpi));
+          kpiMap[kpi._id.toString()].scores.push(normalizeScore(s.score, kpi));
         }
       }
     }
@@ -510,25 +516,73 @@ async function getAnalytics(req, res, next) {
       .filter(Boolean)
       .sort((a, b) => b.avgNormalizedScore - a.avgNormalizedScore);
 
-    // ── Team Trajectories (teams that appear in multiple events) ──
+    // ── Team Trajectories ──
     const teamEventScores = {};
     for (const perf of eventPerformance) {
       for (const ts of perf.teamScores) {
+        if (ts.avgNormalizedScore === null) continue;
         if (!teamEventScores[ts.teamName]) teamEventScores[ts.teamName] = [];
-        teamEventScores[ts.teamName].push({
-          eventName: perf.eventName,
-          date: perf.date,
-          score: ts.avgNormalizedScore,
-        });
+        teamEventScores[ts.teamName].push({ eventName: perf.eventName, date: perf.date, score: ts.avgNormalizedScore });
       }
     }
 
     const teamTrajectories = Object.entries(teamEventScores)
-      .filter(([, pts]) => pts.length >= 1)
       .map(([teamName, points]) => ({ teamName, points: points.sort((a, b) => new Date(a.date) - new Date(b.date)) }));
 
+    // ── Teams Roster ──
+    const teamEvalMap = {};
+    for (const perf of eventPerformance) {
+      for (const ts of perf.teamScores) {
+        if (!teamEvalMap[ts.teamId]) teamEvalMap[ts.teamId] = { scores: [], evalCount: 0 };
+        if (ts.avgNormalizedScore !== null) {
+          teamEvalMap[ts.teamId].scores.push(ts.avgNormalizedScore);
+          teamEvalMap[ts.teamId].evalCount += 1;
+        }
+      }
+    }
+
+    const ROLE_LABELS = {
+      team_lead: 'Team Lead', cto: 'CTO', product: 'Product',
+      business: 'Business', marketing: 'Marketing', presenter: 'Presenter',
+    };
+
+    const teamsRoster = allTeams
+      .filter((t) => !t.isDissolved)
+      .map((t) => {
+        const tid = t._id.toString();
+        const evalData = teamEvalMap[tid] ?? { scores: [], evalCount: 0 };
+        const avgScore = evalData.scores.length > 0
+          ? Math.round(evalData.scores.reduce((a, b) => a + b, 0) / evalData.scores.length)
+          : null;
+        return {
+          id: tid,
+          name: t.name,
+          productIdea: t.productIdea || null,
+          marketFocus: t.marketFocus || null,
+          memberCount: t.members.length,
+          members: t.members.map((m) => ({
+            name: m.trainee ? `${m.trainee.firstName} ${m.trainee.lastName}` : 'Unknown',
+            roles: (m.roles || []).map((r) => ROLE_LABELS[r] ?? r),
+          })),
+          avgScore,
+          evalCount: evalData.evalCount,
+        };
+      });
+
+    // ── Overview ──
+    const overview = {
+      totalTeams: allTeams.filter((t) => !t.isDissolved).length,
+      dissolvedTeams: allTeams.filter((t) => t.isDissolved).length,
+      totalTrainees: traineeCount,
+      totalEvents: events.length,
+      eventsEvaluated: eventPerformance.filter((e) => e.submissionCount > 0).length,
+      avgCohortScore: kpiSummary.length > 0
+        ? Math.round(kpiSummary.reduce((s, k) => s + k.avgNormalizedScore, 0) / kpiSummary.length)
+        : null,
+    };
+
     sendSuccess(res, 200, {
-      data: { eventPerformance, kpiSummary, teamTrajectories },
+      data: { overview, eventPerformance, teamsRoster, kpiSummary, teamTrajectories },
     });
   } catch (err) {
     next(err);
