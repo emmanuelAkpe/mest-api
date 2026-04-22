@@ -38,8 +38,21 @@ async function chat(req, res, next) {
     res.flushHeaders();
 
     const sendEvent = (data) => {
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+        if (typeof res.flush === 'function') res.flush();
+      }
     };
+
+    // Keep connection alive through proxies — send a comment every 15s
+    const heartbeat = setInterval(() => {
+      if (!res.writableEnded) {
+        res.write(': heartbeat\n\n');
+        if (typeof res.flush === 'function') res.flush();
+      }
+    }, 15000);
+
+    req.on('close', () => clearInterval(heartbeat));
 
     // Send session ID immediately so client can track it
     sendEvent({ type: 'session', sessionId: session.id });
@@ -55,6 +68,7 @@ async function chat(req, res, next) {
     } catch (err) {
       logger.error('Agent error', { err: err.message, stack: err.stack });
       sendEvent({ type: 'error', message: err.message || 'Intelligence service unavailable. Please try again.' });
+      clearInterval(heartbeat);
       res.end();
       return;
     }
@@ -63,6 +77,7 @@ async function chat(req, res, next) {
     session.messages.push({ role: 'assistant', content: agentResponse });
     await session.save();
 
+    clearInterval(heartbeat);
     res.end();
   } catch (err) {
     next(err);
