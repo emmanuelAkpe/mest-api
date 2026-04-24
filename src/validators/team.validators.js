@@ -20,32 +20,16 @@ const memberValidation = [
 
 const createTeamValidation = [
   body('name').trim().notEmpty().withMessage('Team name is required.'),
-  body('productIdea')
-    .optional()
-    .trim()
-    .isLength({ max: 500 })
-    .withMessage('Product idea must not exceed 500 characters.'),
-  body('marketFocus')
-    .optional()
-    .trim()
-    .isLength({ max: 500 })
-    .withMessage('Market focus must not exceed 500 characters.'),
+  body('productIdea').optional().trim(),
+  body('marketFocus').optional().trim(),
   body('parentTeam').optional().isMongoId().withMessage('parentTeam must be a valid ID.'),
   ...memberValidation,
 ];
 
 const updateTeamValidation = [
   body('name').optional().trim().notEmpty().withMessage('Team name cannot be empty.'),
-  body('productIdea')
-    .optional()
-    .trim()
-    .isLength({ max: 500 })
-    .withMessage('Product idea must not exceed 500 characters.'),
-  body('marketFocus')
-    .optional()
-    .trim()
-    .isLength({ max: 500 })
-    .withMessage('Market focus must not exceed 500 characters.'),
+  body('productIdea').optional().trim(),
+  body('marketFocus').optional().trim(),
   body('parentTeam').optional().isMongoId().withMessage('parentTeam must be a valid ID.'),
   ...memberValidation,
 ];
