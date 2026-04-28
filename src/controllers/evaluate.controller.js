@@ -49,7 +49,7 @@ async function getForm(req, res, next) {
       await link.save();
     }
 
-    const event = await Event.findById(link.event).select('name type startDate endDate');
+    const event = await Event.findById(link.event).select('name type startDate endDate pitchOrder');
     const kpis = await KPI.find({ event: link.event }).sort({ order: 1, createdAt: 1 });
 
     const existingSubmission = await EvaluationSubmission.findOne({ link: link._id });
@@ -65,7 +65,17 @@ async function getForm(req, res, next) {
           startDate: event.startDate,
           endDate: event.endDate,
         },
-        teams: link.teams,
+        teams: (() => {
+          const order = (event.pitchOrder ?? []).map((id) => id.toString());
+          if (order.length === 0) return link.teams;
+          return [...link.teams].sort((a, b) => {
+            const ai = order.indexOf(a._id.toString());
+            const bi = order.indexOf(b._id.toString());
+            const ap = ai === -1 ? Infinity : ai;
+            const bp = bi === -1 ? Infinity : bi;
+            return ap - bp;
+          });
+        })(),
         kpis: kpis.map((k) => ({
           id: k.id,
           name: k.name,

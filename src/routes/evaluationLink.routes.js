@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const { validate } = require('../middleware/validate');
 const { authenticate } = require('../middleware/authenticate');
-const { create, list, getLink, results, generateTeamLetters, sendTeamFeedback, summarizeSubmission, resend, revoke, getInsights, generateInsights } = require('../controllers/evaluationLink.controller');
+const { create, list, getLink, results, generateTeamLetters, sendTeamFeedback, summarizeSubmission, resend, revoke, extend, getInsights, generateInsights } = require('../controllers/evaluationLink.controller');
 const { createLinkValidation } = require('../validators/evaluationLink.validators');
 
 // Event-scoped: POST /events/:eventId/evaluation-links, GET /events/:eventId/evaluation-links
@@ -20,6 +20,7 @@ const individualRouter = Router();
 individualRouter.get('/:id', authenticate, getLink);
 individualRouter.post('/:id/summarize', authenticate, summarizeSubmission);
 individualRouter.post('/:id/resend', authenticate, resend);
+individualRouter.post('/:id/extend', authenticate, extend);
 individualRouter.delete('/:id', authenticate, revoke);
 
 module.exports = { eventRouter, individualRouter };

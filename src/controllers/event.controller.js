@@ -43,6 +43,7 @@ function formatEvent(event) {
     startDate: event.startDate,
     endDate: event.endDate,
     status: computeStatus(event),
+    pitchOrder: (event.pitchOrder ?? []).map((id) => id.toString()),
     createdBy: event.createdBy,
     createdAt: event.createdAt,
     updatedAt: event.updatedAt,
@@ -223,4 +224,38 @@ async function update(req, res, next) {
   }
 }
 
-module.exports = { create, list, getById, update };
+async function setPitchOrder(req, res, next) {
+  try {
+    const event = await Event.findById(req.params.id);
+    if (!event) {
+      sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Event not found.' });
+      return;
+    }
+
+    const { teamIds } = req.body;
+    if (!Array.isArray(teamIds)) {
+      sendError(res, 400, { code: ERROR_CODES.VALIDATION_ERROR, message: 'teamIds must be an array.' });
+      return;
+    }
+
+    event.pitchOrder = teamIds;
+    await event.save();
+
+    logEventEvent({
+      event: 'event_pitch_order_set',
+      eventId: event.id,
+      updatedBy: req.admin.id,
+      ip: getIp(req),
+      userAgent: getUserAgent(req),
+    });
+
+    sendSuccess(res, 200, {
+      data: formatEvent(event),
+      message: 'Pitch order saved.',
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { create, list, getById, update, setPitchOrder };

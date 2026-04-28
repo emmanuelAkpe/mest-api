@@ -572,6 +572,47 @@ async function resend(req, res, next) {
   }
 }
 
+async function extend(req, res, next) {
+  try {
+    const link = await EvaluationLink.findById(req.params.id);
+    if (!link) {
+      sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Evaluation link not found.' });
+      return;
+    }
+
+    if (link.isRevoked) {
+      sendError(res, 400, { code: ERROR_CODES.VALIDATION_ERROR, message: 'Cannot extend a revoked link.' });
+      return;
+    }
+
+    const { expiresAt } = req.body;
+    if (!expiresAt || new Date(expiresAt) <= new Date()) {
+      sendError(res, 400, { code: ERROR_CODES.VALIDATION_ERROR, message: 'expiresAt must be a future date.' });
+      return;
+    }
+
+    link.expiresAt = new Date(expiresAt);
+    await link.save();
+
+    logLinkEvent({
+      event: 'evaluation_link_extended',
+      linkId: link.id,
+      eventId: link.event,
+      newExpiresAt: link.expiresAt,
+      extendedBy: req.admin.id,
+      ip: getIp(req),
+      userAgent: getUserAgent(req),
+    });
+
+    sendSuccess(res, 200, {
+      data: formatLink(link),
+      message: 'Evaluation link extended.',
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function revoke(req, res, next) {
   try {
     const link = await EvaluationLink.findById(req.params.id);
@@ -666,4 +707,4 @@ async function generateInsights(req, res, next) {
   }
 }
 
-module.exports = { create, list, getLink, results, generateTeamLetters, sendTeamFeedback, summarizeSubmission, resend, revoke, getInsights, generateInsights };
+module.exports = { create, list, getLink, results, generateTeamLetters, sendTeamFeedback, summarizeSubmission, resend, revoke, extend, getInsights, generateInsights };

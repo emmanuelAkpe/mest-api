@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const { validate } = require('../middleware/validate');
 const { authenticate } = require('../middleware/authenticate');
-const { create, list, getById, update } = require('../controllers/event.controller');
+const { create, list, getById, update, setPitchOrder } = require('../controllers/event.controller');
 const {
   createEventValidation,
   updateEventValidation,
@@ -17,5 +17,6 @@ cohortRouter.get('/', authenticate, listEventsValidation, validate, list);
 const individualRouter = Router();
 individualRouter.get('/:id', authenticate, getById);
 individualRouter.put('/:id', authenticate, updateEventValidation, validate, update);
+individualRouter.put('/:id/pitch-order', authenticate, setPitchOrder);
 
 module.exports = { cohortRouter, individualRouter };

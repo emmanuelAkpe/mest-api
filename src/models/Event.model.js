@@ -11,6 +11,7 @@ const eventSchema = new mongoose.Schema(
     description: { type: String, trim: true },
     startDate: { type: Date, required: true },
     endDate: { type: Date, required: true },
+    pitchOrder: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Team' }],
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
   },
   { timestamps: true }
