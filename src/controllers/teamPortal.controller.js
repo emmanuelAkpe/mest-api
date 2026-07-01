@@ -16,6 +16,7 @@ const { generateRawToken } = require('../utils/tokenUtils')
 const { sendSuccess, sendError, ERROR_CODES } = require('../utils/response')
 const { logger } = require('../utils/logger')
 const { generateSubmissionSummary } = require('../services/gemini.service')
+const { resolveTraineeTeams, pickTeam, summarizeTeams } = require('../utils/traineeTeams')
 
 async function requestOtp(req, res, next) {
   try {
@@ -29,7 +30,10 @@ async function requestOtp(req, res, next) {
       return sendSuccess(res, 200, { message: 'If that email is registered, you will receive a code.' })
     }
 
-    const team = await Team.findOne({ 'members.trainee': trainee._id, isDissolved: false }).select('_id name')
+    // Use their most recent team for the OTP email context. The session is no
+    // longer pinned to a single team — getPortalData resolves the live list.
+    const teams = await resolveTraineeTeams(trainee._id)
+    const team = teams[0]
     if (!team) {
       return sendSuccess(res, 200, { message: 'If that email is registered, you will receive a code.' })
     }
@@ -103,7 +107,15 @@ async function getPortalData(req, res, next) {
       return sendError(res, 401, { code: ERROR_CODES.UNAUTHORIZED, message: 'Invalid or expired session.' })
     }
 
-    const team = await Team.findById(session.team)
+    // Resolve the live list of the trainee's teams (never trust session.team —
+    // it may point at an old team the trainee has since moved off of).
+    const traineeTeams = await resolveTraineeTeams(session.trainee)
+    const selected = pickTeam(traineeTeams, req.query.teamId)
+    if (!selected) {
+      return sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'You are not currently on any team.' })
+    }
+
+    const team = await Team.findById(selected._id)
       .populate('members.trainee', 'firstName lastName photo')
       .populate('cohort', 'name year')
       .populate('event', 'name type startDate endDate')
@@ -112,6 +124,8 @@ async function getPortalData(req, res, next) {
     if (!team) {
       return sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Team not found.' })
     }
+
+    const teamSwitcher = summarizeTeams(traineeTeams, team._id)
 
     // Find all events where this team has been scored
     const submissions = await EvaluationSubmission.find({ 'teamScores.team': team._id })
@@ -173,7 +187,10 @@ async function getPortalData(req, res, next) {
 
             if (kpiScores.length > 0 || ts.overallComment) {
               evaluators.push({
-                seed: `mest-expert-${evalIdx++}`,
+                name: sub.evaluatorName || null,
+                // Seed the avatar off the name so the same expert keeps the same
+                // face across events; fall back to an index when name is missing.
+                seed: sub.evaluatorName || `mest-expert-${evalIdx++}`,
                 overallComment: ts.overallComment || null,
                 kpiScores,
               })
@@ -322,7 +339,7 @@ async function getPortalData(req, res, next) {
       })).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
     }
 
-    sendSuccess(res, 200, { data: { team: teamData, events, mentorSessions: formattedSessions } })
+    sendSuccess(res, 200, { data: { team: teamData, teams: teamSwitcher, events, mentorSessions: formattedSessions } })
   } catch (err) {
     next(err)
   }
@@ -350,7 +367,18 @@ async function generateEventSummary(req, res, next) {
     if (!session) return sendError(res, 401, { code: ERROR_CODES.UNAUTHORIZED, message: 'Invalid or expired session.' })
 
     const { eventId } = req.params
-    const teamId = session.team
+
+    // Resolve which of the trainee's teams this summary is for. Prefer an
+    // explicit teamId (the team the portal is currently viewing), validated
+    // against their memberships; otherwise fall back to the team tied to this
+    // event, then their most recent team.
+    const traineeTeams = await resolveTraineeTeams(session.trainee)
+    const requestedTeamId = req.body?.teamId || req.query?.teamId
+    const requested = requestedTeamId && traineeTeams.find((t) => t._id.toString() === requestedTeamId.toString())
+    const teamForEvent = traineeTeams.find((t) => (t.event?._id ?? t.event)?.toString() === eventId)
+    const selected = requested || teamForEvent || traineeTeams[0]
+    if (!selected) return sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'You are not currently on any team.' })
+    const teamId = selected._id
 
     // Return cached summary if available
     const existing = await EvaluationFeedbackLetter.findOne({ team: teamId, event: eventId })
@@ -408,7 +436,14 @@ ${kpiLines}
 OVERALL PANEL COMMENTS:
 ${overallBlock || '  (none)'}
 
-Write a concise, honest, team-facing summary of this feedback. Speak directly to the team as "you". Do NOT mention evaluators, judges, or scores numerically. Translate scores into qualitative language. Include what they did well and what they need to work on. 2–3 short paragraphs. No headers.
+Write a short, honest, team-facing summary of this feedback. Speak directly to the team as "you".
+
+Rules:
+- Maximum 3–4 sentences. Be tight — no filler, no pep-talk, no restating the team/product.
+- Only say what the feedback above actually says. Do NOT invent strengths, weaknesses, or advice that isn't grounded in the comments/scores.
+- Lead with the single clearest strength, then the single most important thing to work on.
+- Do NOT mention evaluators, judges, or numeric scores. Translate scores into plain qualitative language.
+- No headers, no bullet points, one short paragraph.
 
 Return ONLY valid JSON:
 { "summary": "<text>" }`
@@ -416,7 +451,7 @@ Return ONLY valid JSON:
     const aiRes = await fetch(OPENAI_BASE, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-      body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' }, temperature: 0.5, max_tokens: 600 }),
+      body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }], response_format: { type: 'json_object' }, temperature: 0.3, max_tokens: 220 }),
     })
     if (!aiRes.ok) throw new Error(`OpenAI error ${aiRes.status}`)
     const aiData = await aiRes.json()
@@ -446,7 +481,8 @@ async function submitDeliverable(req, res, next) {
     const { submissionLinkId } = req.params
     const link = await SubmissionLink.findById(submissionLinkId)
     if (!link) return sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Submission link not found.' })
-    if (link.team.toString() !== session.team.toString()) return sendError(res, 403, { code: ERROR_CODES.FORBIDDEN, message: 'This submission link does not belong to your team.' })
+    const traineeTeams = await resolveTraineeTeams(session.trainee)
+    if (!traineeTeams.some((t) => t._id.toString() === link.team.toString())) return sendError(res, 403, { code: ERROR_CODES.FORBIDDEN, message: 'This submission link does not belong to your team.' })
     if (new Date() > link.deadline) return sendError(res, 400, { code: ERROR_CODES.VALIDATION_ERROR, message: 'The submission deadline has passed.' })
 
     let url, filename, fileType, label
@@ -487,7 +523,7 @@ async function submitDeliverable(req, res, next) {
     const item = { fileType, url, filename: filename || null, label: label || null, submittedByEmail, submittedAt: new Date() }
     await SubmissionLink.updateOne({ _id: link._id }, { $push: { submissions: item } })
 
-    logger.info('Portal deliverable submitted', { teamId: session.team, linkId: submissionLinkId, fileType })
+    logger.info('Portal deliverable submitted', { teamId: link.team, linkId: submissionLinkId, fileType })
     sendSuccess(res, 201, { data: item, message: 'Submission received.' })
   } catch (err) {
     next(err)
@@ -503,7 +539,8 @@ async function deleteDeliverable(req, res, next) {
     const { submissionLinkId, submissionId } = req.params
     const link = await SubmissionLink.findById(submissionLinkId)
     if (!link) return sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Submission link not found.' })
-    if (link.team.toString() !== session.team.toString()) return sendError(res, 403, { code: ERROR_CODES.FORBIDDEN, message: 'Not your team.' })
+    const traineeTeams = await resolveTraineeTeams(session.trainee)
+    if (!traineeTeams.some((t) => t._id.toString() === link.team.toString())) return sendError(res, 403, { code: ERROR_CODES.FORBIDDEN, message: 'Not your team.' })
 
     await SubmissionLink.updateOne({ _id: link._id }, { $pull: { submissions: { _id: submissionId } } })
     sendSuccess(res, 200, { message: 'Submission removed.' })

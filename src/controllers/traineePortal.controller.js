@@ -15,6 +15,7 @@ const { generateRawToken } = require('../utils/tokenUtils')
 const { sendSuccess, sendError, ERROR_CODES } = require('../utils/response')
 const { logger } = require('../utils/logger')
 const { createNotification } = require('../services/notification.service')
+const { resolveTraineeTeams, pickTeam, summarizeTeams } = require('../utils/traineeTeams')
 
 async function requestOtp(req, res, next) {
   try {
@@ -89,11 +90,17 @@ async function getMe(req, res, next) {
     const trainee = await Trainee.findById(session.trainee)
     if (!trainee) return sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Trainee not found.' })
 
-    // Load team membership
-    const team = await Team.findOne({ 'members.trainee': trainee._id, isDissolved: false })
-      .populate('members.trainee', 'firstName lastName photo')
-      .populate('event', 'name type startDate endDate')
-      .select('name productIdea marketFocus members event')
+    // Load team membership — a trainee accumulates one team per event, so resolve
+    // the full list (newest first) and view the requested/most-recent one rather
+    // than whatever Mongo returns first (which is their oldest, stale team).
+    const traineeTeams = await resolveTraineeTeams(trainee._id)
+    const selected = pickTeam(traineeTeams, req.query.teamId)
+    const team = selected
+      ? await Team.findById(selected._id)
+          .populate('members.trainee', 'firstName lastName photo')
+          .populate('event', 'name type startDate endDate')
+          .select('name productIdea marketFocus members event')
+      : null
 
     const eventId = team?.event?._id ?? team?.event
 
@@ -200,6 +207,7 @@ async function getMe(req, res, next) {
               })),
             }
           : null,
+        teams: summarizeTeams(traineeTeams, team?._id),
         submissionLinks: portalLinks,
         mentorReviews,
         facilitatorLogs,

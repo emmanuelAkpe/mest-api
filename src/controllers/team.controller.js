@@ -601,4 +601,51 @@ async function sendPortalInvite(req, res, next) {
   }
 }
 
-module.exports = { create, list, getById, update, dissolve, logPivot, logMemberChange, listMemberChanges, sendTeamProfileLink, revokeTeamProfileLink, assignMentor, sendPortalInvite };
+// POST /events/:eventId/teams/portal-invites
+// Blast portal invites to every member of every active team in an event — so
+// admins don't have to open each team one by one.
+async function sendEventPortalInvites(req, res, next) {
+  try {
+    const { eventId } = req.params;
+
+    const event = await Event.findById(eventId).select('_id');
+    if (!event) {
+      sendError(res, 404, { code: ERROR_CODES.NOT_FOUND, message: 'Event not found.' });
+      return;
+    }
+
+    const teams = await Team.find({ event: eventId, isDissolved: false })
+      .populate('members.trainee', 'firstName email')
+      .select('name members');
+
+    const portalUrl = `${env.FRONTEND_URL || 'http://localhost:5173'}/team-portal`;
+
+    const results = [];
+    let totalSent = 0;
+    for (const team of teams) {
+      const recipients = team.members.map((m) => m.trainee).filter((t) => t?.email);
+      if (recipients.length === 0) {
+        results.push({ teamId: team._id, teamName: team.name, sentTo: 0, skipped: 'no members with email' });
+        continue;
+      }
+      await Promise.allSettled(
+        recipients.map((trainee) =>
+          sendTeamPortalInviteEmail({ to: trainee.email, firstName: trainee.firstName, teamName: team.name, portalUrl })
+            .catch((err) => logger.warn('Team portal invite email failed', { email: trainee.email, err: err?.message }))
+        )
+      );
+      totalSent += recipients.length;
+      results.push({ teamId: team._id, teamName: team.name, sentTo: recipients.length });
+    }
+
+    logTeamEvent({ event: 'event_portal_invites_sent', eventId, teamCount: teams.length, totalSent, by: req.admin.id });
+    sendSuccess(res, 200, {
+      data: { teams: results, totalSent },
+      message: `Portal invites sent to ${totalSent} member(s) across ${teams.length} team(s).`,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { create, list, getById, update, dissolve, logPivot, logMemberChange, listMemberChanges, sendTeamProfileLink, revokeTeamProfileLink, assignMentor, sendPortalInvite, sendEventPortalInvites };

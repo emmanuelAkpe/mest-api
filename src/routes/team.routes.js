@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const { validate } = require('../middleware/validate');
 const { authenticate } = require('../middleware/authenticate');
-const { create, list, getById, update, dissolve, logPivot, logMemberChange, listMemberChanges, sendTeamProfileLink, revokeTeamProfileLink, assignMentor, sendPortalInvite } = require('../controllers/team.controller');
+const { create, list, getById, update, dissolve, logPivot, logMemberChange, listMemberChanges, sendTeamProfileLink, revokeTeamProfileLink, assignMentor, sendPortalInvite, sendEventPortalInvites } = require('../controllers/team.controller');
 const {
   createTeamValidation,
   updateTeamValidation,
@@ -14,6 +14,7 @@ const {
 const eventRouter = Router({ mergeParams: true });
 eventRouter.post('/', authenticate, createTeamValidation, validate, create);
 eventRouter.get('/', authenticate, listTeamsValidation, validate, list);
+eventRouter.post('/portal-invites', authenticate, sendEventPortalInvites);
 
 // Individual: GET /teams/:id, PUT /teams/:id, POST /teams/:id/dissolve, POST /teams/:id/pivots
 const individualRouter = Router();
